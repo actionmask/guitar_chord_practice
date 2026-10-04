@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>嫁禍進行式 跟彈練習</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&display=swap">
+<style>
+/* Layout: a sticky "now playing" deck (big chord, beat lamps, fingering) over a 4-bars-per-row chart that follows the music. */
+:root{
+  --bg:#eef0f4; --panel:#ffffff; --ink:#1b2030; --mute:#636b80; --line:#d3d8e2;
+  --accent:#c2410c; --on-accent:#ffffff;
+  --cA:#b45309; --cF:#0f766e; --cG:#6d3fc4; --cB:#be185d;
+  --hit:#fff3d6; --red:#d92d20;
+  --disp:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:system-ui,-apple-system,"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#12151d; --panel:#1b1f2b; --ink:#e8ebf2; --mute:#98a1b5; --line:#2f3545;
+  --accent:#fb923c; --on-accent:#1b1205;
+  --cA:#fbbf24; --cF:#2dd4bf; --cG:#b79bff; --cB:#f472b6;
+  --hit:#3a2c12; --red:#ff5a4d; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#12151d; --panel:#1b1f2b; --ink:#e8ebf2; --mute:#98a1b5; --line:#2f3545;
+  --accent:#fb923c; --on-accent:#1b1205;
+  --cA:#fbbf24; --cF:#2dd4bf; --cG:#b79bff; --cB:#f472b6;
+  --hit:#3a2c12; --red:#ff5a4d; color-scheme:dark }
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:16px 48px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;margin:0;font-weight:700}
+.sub{color:var(--mute);font-size:13px}
+.num{font-family:var(--disp);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,.bar:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700;min-width:84px}
+input[type=number]{width:64px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 6px}
+label{display:inline-flex;align-items:center;gap:6px}
+
+.deck{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.now{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.chord{font-family:var(--disp);font-weight:700;font-size:129px;line-height:.9;min-width:1.1em}
+.meta{display:flex;flex-direction:column;gap:6px;flex:1;min-width:150px}
+.sec{font-weight:700}
+.lamps{display:flex;gap:6px}
+.lamp{width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+.lamp.on{background:var(--ink);border-color:var(--ink)}
+.lamp.acc{border-color:var(--red)}
+.lamp.acc.on{background:var(--red);border-color:var(--red);transform:scale(1.25)}
+.next{color:var(--mute);font-size:13px}
+.next b{font-family:var(--disp);font-size:38px;color:var(--ink)}
+svg.dia{width:92px;height:112px;flex:none}
+.transport{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.time{color:var(--mute);margin-left:auto}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap}
+.row>strong{min-width:3.5em}
+.hint{color:var(--mute);font-size:13px;margin:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:13px;padding:3px 10px;border-radius:999px}
+.pt{font-size:12px;padding:2px 8px}
+
+.chart{display:flex;flex-direction:column;gap:14px}
+.sechead{font-weight:700;font-size:13px;letter-spacing:.04em;color:var(--mute);margin-bottom:4px}
+.bars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.bar{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px 8px;min-height:80px;cursor:pointer;overflow:hidden;text-align:left}
+.bar .n{font-family:var(--disp);font-size:13px;color:var(--mute);display:block}
+.bar .cs{display:grid;grid-template-columns:repeat(4,1fr);font-family:var(--disp);font-weight:700;font-size:47px;line-height:1}
+.bar.cur{background:var(--hit);border-color:var(--accent)}
+.bar .prog{position:absolute;left:0;bottom:0;height:4px;width:0;background:var(--accent)}
+.bar.skip{opacity:.4}
+.bar.loop{box-shadow:inset 0 0 0 1px var(--accent)}
+.cA{color:var(--cA)} .cF{color:var(--cF)} .cG{color:var(--cG)} .cB{color:var(--cB)} .cN{color:var(--mute)}
+@media (max-width:480px){ .deck{padding:8px 10px;gap:6px} .now{gap:10px} svg.dia{width:66px;height:80px} .chord{font-size:88px} .bar .cs{font-size:38px} .bar{padding:3px 5px 7px;min-height:68px} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>嫁禍進行式 跟彈練習</h1>
+    <div class="sub">張懸 · Bar Chords 版 · <span class="num">110</span> bpm · 4/4 · 共 <span class="num">114</span> 小節</div>
+  </header>
+
+  <section class="deck" aria-label="目前進度">
+    <div class="now">
+      <div class="chord" id="chord">A</div>
+      <svg class="dia" id="dia" viewBox="0 0 92 112" aria-hidden="true"></svg>
+      <div class="meta">
+        <div><span class="sec" id="sec">Intro</span> · 第 <span class="num" id="barno">1</span> 小節</div>
+        <div class="lamps" id="lamps"><i class="lamp"></i><i class="lamp"></i><i class="lamp acc"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp"></i><i class="lamp acc"></i><i class="lamp"></i></div>
+        <div class="next">下一個 <b id="next">A</b> <span id="nextin"></span></div>
+      </div>
+    </div>
+    <div class="transport">
+      <button class="primary" id="play">播放</button>
+      <button id="restart">⏮ 重來</button>
+      <button id="prev" aria-label="上一小節">◀ 小節</button>
+      <button id="nextbar" aria-label="下一小節">小節 ▶</button>
+      <label>速度 <select id="rate"><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.8">80%</option><option value="0.9">90%</option><option value="1" selected>100%</option></select></label>
+      <span class="time num" id="time">0:00</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row"><strong>音樂</strong>
+      <input type="file" id="file" accept="audio/*">
+      <span class="hint" id="fname">還沒選音樂時，會用內建節拍器照 110 bpm 走。</span>
+    </div>
+    <div class="row"><strong>開頭</strong>
+      <label>音樂從第 <input type="number" id="startbar" min="1" max="114" value="2"> 小節開始播放</label>
+      <label>音樂延遲 <input type="number" id="delay" step="0.01" min="-30" max="30" value="0.00" style="width:76px"> 秒</label>
+      <span class="hint">指標走到這個小節後，再過「延遲」這麼多秒音樂才開始；填負數就是音樂提早開始。音樂開始前只有節拍聲。</span>
+    </div>
+    <div class="row"><strong>對齊</strong>
+      <label>第 <input type="number" id="syncbar" min="1" max="114" value="2"> 小節</label>
+      <button id="sync">現在是這小節的第一拍 (S)</button>
+      <button id="early" title="指標整體提早 20 毫秒">指標提早</button>
+      <button id="late" title="指標整體延後 20 毫秒">指標延後</button>
+      <label>BPM <input type="number" id="bpm" min="40" max="240" step="0.1" value="110"></label>
+    </div>
+    <div class="chips" id="pts"></div>
+    <p class="hint">MP3 開頭如果有一段空白，播放後在音樂第一下刷弦時按 S 對齊。之後如果指標慢慢跑掉，在任何一個小節的第一拍改好小節數再按一次，指標會在各對齊點之間自動補正。</p>
+    <div class="row"><strong>循環</strong>
+      <label><input type="checkbox" id="loop"> 重複</label>
+      <label>第 <input type="number" id="la" min="1" max="114" value="32"> 到 <input type="number" id="lb" min="1" max="114" value="41"> 小節</label>
+      <label><input type="checkbox" id="click" checked> 節拍聲</label>
+      <label><input type="checkbox" id="follow" checked> 自動捲動</label>
+    </div>
+    <div class="chips" id="secs"></div>
+  </section>
+
+  <section class="chart" id="chart" aria-label="和弦進行"></section>
+  <p class="hint">空白鍵播放／暫停，← → 換小節，點任何一格跳到那裡。上方八個燈是一小節的八個八分音符，紅色的第 3、7 下是重音。和弦指型都是 E 型封閉和弦：F 第 1 格、G 第 3 格、A 第 5 格、B 第 7 格。</p>
+</div>
+<audio id="audio" preload="auto"></audio>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const TOTAL=114, FRET={A:5,F:1,G:3,B:7};
+// ---- chart data (from the PDF) ----
+const bars=Array.from({length:TOTAL+1},()=>[]); // bars[n] = [[chord, beat]]
+const put=(from,pat,times)=>{let b=from;for(let i=0;i<times;i++)for(const p of pat)bars[b++]=p};
+const A=[['A',0]],F=[['F',0]],G=[['G',0]],FG=[['F',0],['G',2]],GA=[['G',0],['A',3]];
+put(2,[A,A,F,F],4); put(18,[A,A],1);
+put(20,[F,F,A,A],3);
+put(32,[A,A,F,FG],2); put(40,[A,A],1);
+put(42,[F,F,A,A],2); put(50,[G,GA,G,GA,G,GA,G,[['B',0]]],1);
+put(58,[A,A,F,FG],10);
+put(98,[A,A,F,F],4);
+const sections=[['Intro',1,19],['Verse 1',20,31],['Chorus 1',32,41],['Verse 2',42,57],['Chorus 2',58,73],['Bridge',74,81],['Solo',82,89],['Bridge',90,97],['Outro',98,114]];
+const events=[]; for(let b=1;b<=TOTAL;b++)for(const [c,bt] of bars[b])events.push({beat:(b-1)*4+bt,chord:c});
+const END=TOTAL*4;
+
+// ---- state ----
+const audio=$('audio'); let hasAudio=false, playing=false, clockT=0, lastNow=0, fileKey='';
+let bpm=110, pts=[{bar:2,t:0}], lastBeat=null, lastBar=0, actx=null;
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+// ---- time <-> beat (piecewise through sync points) ----
+const spb=()=>60/bpm, pb=p=>(p.bar-1)*4;
+function beatAt(t){const P=pts;
+  if(t<=P[0].t||P.length===1&&true){ if(P.length===1||t<=P[0].t) return pb(P[0])+(t-P[0].t)/spb(); }
+  for(let i=0;i<P.length-1;i++) if(t<P[i+1].t) return pb(P[i])+(t-P[i].t)/(P[i+1].t-P[i].t)*(pb(P[i+1])-pb(P[i]));
+  const L=P[P.length-1]; return pb(L)+(t-L.t)/spb();}
+function timeAt(beat){const P=pts;
+  if(P.length===1||beat<=pb(P[0])) return P[0].t+(beat-pb(P[0]))*spb();
+  for(let i=0;i<P.length-1;i++) if(beat<pb(P[i+1])) return P[i].t+(beat-pb(P[i]))/(pb(P[i+1])-pb(P[i]))*(P[i+1].t-P[i].t);
+  const L=P[P.length-1]; return L.t+(beat-pb(L))*spb();}
+let preT=0; // <0 while counting through the prep bars before the audio starts
+const now=()=>hasAudio?(preT<0?preT:audio.currentTime):clockT;
+const headT=()=>Math.min(timeAt(0),-4*spb()); // always at least one bar of count-in clicks before the audio starts
+function seekTime(t){t=Math.max(headT(),t);
+  if(!hasAudio)clockT=t;
+  else if(t<0){preT=t; audio.pause(); audio.currentTime=0;}
+  else{preT=0; audio.currentTime=t; if(playing&&audio.paused)audio.play().catch(()=>setPlay(false));}
+  lastBeat=null; draw();}
+const seekBar=b=>seekTime(timeAt((Math.min(TOTAL,Math.max(1,b))-1)*4)+0.001);
+const curBar=()=>Math.min(TOTAL,Math.max(1,Math.floor(beatAt(now())/4)+1));
+
+// ---- build chart ----
+const chart=$('chart'), cells=[];
+for(const [name,a,b] of sections){
+  const s=document.createElement('div'), h=document.createElement('div'), g=document.createElement('div');
+  h.className='sechead'; h.textContent=name+'　'+a+'–'+b; g.className='bars';
+  for(let n=a;n<=b;n++){
+    const c=document.createElement('button'); c.className='bar'; c.type='button';
+    if(n===1)c.style.gridColumnStart=4;
+    let html='<span class="n">'+n+'</span><span class="cs">';
+    if(!bars[n].length) html+='<span class="cN" style="grid-column:1/-1">–</span>';
+    bars[n].forEach(([ch,bt],i)=>{const end=i+1<bars[n].length?bars[n][i+1][1]:4; html+='<span class="c'+ch+'" style="grid-column:'+(bt+1)+'/'+(end+1)+'">'+ch+'</span>'});
+    c.innerHTML=html+'</span><i class="prog"></i>';
+    c.setAttribute('aria-label','第 '+n+' 小節 '+(bars[n].map(x=>x[0]).join(' ')||'休止'));
+    c.onclick=()=>seekBar(n); g.appendChild(c); cells[n]=c;
+  }
+  s.append(h,g); chart.appendChild(s);
+  const chip=document.createElement('button'); chip.className='chip'; chip.textContent=name;
+  chip.onclick=()=>{$('la').value=a;$('lb').value=b;markLoop();seekBar(a)}; $('secs').appendChild(chip);
+}
+function markLoop(){const on=$('loop').checked,a=+$('la').value,b=+$('lb').value; for(let n=1;n<=TOTAL;n++)cells[n].classList.toggle('loop',on&&n>=a&&n<=b);}
+
+// ---- chord diagram (E-shape barre) ----
+function diagram(ch){const d=$('dia'); if(!FRET[ch]){d.innerHTML='';return}
+  const x=i=>22+i*12, y=f=>20+f*20, ink='var(--ink)', col='var(--c'+ch+')'; let s='';
+  for(let i=0;i<6;i++)s+='<line x1="'+x(i)+'" y1="20" x2="'+x(i)+'" y2="100" stroke="'+ink+'" stroke-width="1"/>';
+  for(let f=0;f<=4;f++)s+='<line x1="22" y1="'+y(f)+'" x2="82" y2="'+y(f)+'" stroke="'+ink+'" stroke-width="1"/>';
+  s+='<rect x="17" y="24" width="70" height="12" rx="6" fill="'+col+'"/>';
+  [[1,2.5],[2,2.5],[3,1.5]].forEach(([i,f])=>s+='<circle cx="'+x(i)+'" cy="'+(20+f*20)+'" r="6" fill="'+col+'"/>');
+  s+='<text x="2" y="35" font-size="13" font-family="var(--disp)" fill="'+ink+'">'+FRET[ch]+'</text>';
+  s+='<text x="52" y="12" font-size="11" text-anchor="middle" font-family="var(--body)" fill="var(--mute)">第 '+FRET[ch]+' 格封閉</text>';
+  d.innerHTML=s;}
+
+// ---- draw ----
+let shownChord=null;
+const fmt=t=>{t=Math.max(0,t);return Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0')};
+function scrollToBar(b){const dk=document.querySelector('.deck'); cells[b].style.scrollMarginTop=((parseFloat(getComputedStyle(dk).top)||0)+dk.offsetHeight+34)+'px'; cells[b].scrollIntoView({block:'start',behavior:'smooth'});}
+function draw(){
+  const beat=beatAt(now()), bar=curBar(), inBar=Math.max(0,Math.min(3.999,beat-(bar-1)*4));
+  if(bar!==lastBar){ if(cells[lastBar]){cells[lastBar].classList.remove('cur');cells[lastBar].lastChild.style.width='0'}
+    cells[bar].classList.add('cur'); lastBar=bar; $('barno').textContent=bar;
+    $('sec').textContent=sections.find(s=>bar>=s[1]&&bar<=s[2])[0];
+    if($('follow').checked&&playing)scrollToBar(bar); }
+  cells[bar].lastChild.style.width=(inBar/4*100)+'%';
+  let i=-1; while(i+1<events.length&&events[i+1].beat<=beat+1e-6)i++;
+  const cur=i>=0&&bars[bar].length?events[i].chord:null, nx=events[i+1];
+  if(cur!==shownChord){shownChord=cur; const el=$('chord'); el.textContent=cur||'–'; el.className='chord c'+(cur||'N'); diagram(cur);}
+  $('next').textContent=nx?nx.chord:'結束'; $('nextin').textContent=nx?'（'+Math.max(1,Math.ceil(nx.beat-beat))+' 拍後）':'';
+  const lb=Math.floor((((beat%4)+4)%4)*2); [...$('lamps').children].forEach((l,k)=>l.classList.toggle('on',k===lb));
+  $('time').textContent=fmt(now())+(hasAudio&&audio.duration?' / '+fmt(audio.duration):'');
+}
+function tick(ts){
+  if(playing){
+    const tn=performance.now(), dt=Math.max(0,Math.min(.25,(tn-lastNow)/1000))*(+$('rate').value); lastNow=tn;
+    if(!hasAudio)clockT+=dt;
+    else if(preT<0){preT+=dt; if(preT>=0){preT=0; audio.currentTime=0; audio.play().catch(()=>setPlay(false));}}
+    const beat=beatAt(now());
+    if($('loop').checked){const a=+$('la').value,b=+$('lb').value; if(b>=a&&beat>=b*4){seekBar(a);requestAnimationFrame(tick);return}}
+    const bi=Math.floor(beat);
+    if(bi!==lastBeat){ if(lastBeat!==null||beat-bi<.15) beep(((bi%4)+4)%4===0,hasAudio&&preT<0); lastBeat=bi; }
+    if(beat>=END||(hasAudio&&audio.ended)){setPlay(false)}
+  }
+  draw(); requestAnimationFrame(tick);
+}
+function beep(accent,force){ if(!force&&!$('click').checked)return; try{
+  actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime;
+  o.frequency.value=accent?1500:1000; g.gain.setValueAtTime(.18,t); g.gain.exponentialRampToValueAtTime(.001,t+.06);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t+.07);}catch(e){} }
+let wl=null; // keep the screen awake while playing, where the browser allows it
+function wake(on){ try{
+  if(on){ if(!wl&&navigator.wakeLock)navigator.wakeLock.request('screen').then(l=>{wl=l; l.addEventListener('release',()=>{if(wl===l)wl=null}); if(!playing)wake(false)}).catch(()=>{}); }
+  else if(wl){ const l=wl; wl=null; l.release().catch(()=>{}); } }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&playing)wake(true) });
+function setPlay(p){ playing=p; wake(p); $('play').textContent=p?'暫停':'播放'; lastNow=performance.now(); lastBeat=null;
+  if(p&&beatAt(now())>=END)seekTime(-1e9);
+  if(p&&$('follow').checked)scrollToBar(curBar());
+  if(hasAudio){ if(!p)audio.pause(); else if(preT>=0)audio.play().catch(()=>setPlay(false)); } }
+
+// ---- sync points ----
+function savePts(){ if(fileKey)store.set('sync:'+fileKey,{pts,bpm}); }
+function showPts(){ const box=$('pts'); box.innerHTML=''; markSkip();
+  pts.forEach((p,i)=>{const b=document.createElement('button'); b.className='chip pt num';
+    b.textContent='第 '+p.bar+' 小節 = '+p.t.toFixed(2)+' 秒'+(pts.length>1?' ✕':''); b.title=pts.length>1?'移除這個對齊點':'';
+    b.onclick=()=>{ if(pts.length>1){pts.splice(i,1);savePts();showPts();draw()} }; box.appendChild(b); }); }
+function addPt(){ const bar=Math.min(TOTAL,Math.max(1,+$('syncbar').value||1)), t=now();
+  pts=pts.filter(p=>p.bar!==bar&&((p.bar<bar&&p.t<t)||(p.bar>bar&&p.t>t))); pts.push({bar,t}); pts.sort((a,b)=>a.bar-b.bar);
+  lastBeat=null; savePts(); showPts(); draw(); }
+function markSkip(){ $('startbar').value=pts[0].bar; if(document.activeElement!==$('delay'))$('delay').value=(0-pts[0].t).toFixed(2); }
+function setSkip(){ const n=Math.min(TOTAL,Math.max(1,Math.floor(+$('startbar').value||1)));
+  pts=[{bar:n,t:hasAudio?pts[0].t:0}]; $('syncbar').value=n; savePts(); showPts(); seekTime(-1e9); }
+function nudge(d){ pts.forEach(p=>p.t+=d); savePts(); showPts(); draw(); }
+
+// ---- wiring ----
+$('play').onclick=()=>setPlay(!playing); $('restart').onclick=()=>seekTime(-1e9);
+$('prev').onclick=()=>seekBar(curBar()-1); $('nextbar').onclick=()=>seekBar(curBar()+1);
+$('startbar').onchange=setSkip; $('delay').onchange=e=>{const v=Math.round(parseFloat(e.target.value)*100)/100; if(isFinite(v))nudge(-v-pts[0].t); e.target.value=(0-pts[0].t).toFixed(2)}; $('sync').onclick=addPt; $('early').onclick=()=>nudge(-.02); $('late').onclick=()=>nudge(.02);
+$('rate').onchange=e=>{audio.playbackRate=+e.target.value};
+$('bpm').onchange=e=>{const v=+e.target.value; if(v>=40&&v<=240){bpm=v;savePts();draw()}};
+$('loop').onchange=$('la').onchange=$('lb').onchange=markLoop;
+// Decode to WAV first: seeking inside a compressed MP3 can land a few tenths of a second off, WAV seeks exactly.
+async function toWav(f){ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+  const buf=await actx.decodeAudioData(await f.arrayBuffer()), ch=Math.min(2,buf.numberOfChannels), n=buf.length, sr=buf.sampleRate;
+  const ab=new ArrayBuffer(44+n*ch*2), v=new DataView(ab), w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
+  w(0,'RIFF'); v.setUint32(4,36+n*ch*2,true); w(8,'WAVEfmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,ch,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*ch*2,true); v.setUint16(32,ch*2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*ch*2,true);
+  const out=new Int16Array(ab,44), d=[]; for(let c=0;c<ch;c++)d.push(buf.getChannelData(c));
+  for(let i=0,o=0;i<n;i++)for(let c=0;c<ch;c++){const x=d[c][i]; out[o++]=x<-1?-32768:x>1?32767:x*32767;}
+  return new Blob([ab],{type:'audio/wav'}); }
+$('file').onchange=async e=>{ const f=e.target.files[0]; if(!f)return; setPlay(false);
+  $('fname').textContent='處理音樂中…'; let src=f, exact=true;
+  try{src=await toWav(f)}catch(err){exact=false}
+  audio.src=URL.createObjectURL(src); audio.playbackRate=+$('rate').value; hasAudio=true; fileKey=f.name;
+  const s=store.get('sync:'+fileKey); pts=s&&s.pts&&s.pts.length?s.pts:[{bar:Math.min(TOTAL,Math.max(1,+$('startbar').value||2)),t:0}]; preT=0; if(s&&s.bpm){bpm=s.bpm;$('bpm').value=bpm}
+  $('click').checked=false; $('fname').textContent=(s?'已載入，並套用上次存的對齊點。':'已載入。')+(exact?'':'這個檔案無法轉成精確定位的格式，跳小節時可能有些微誤差。');
+  showPts(); seekTime(-1e9); };
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button'); if(b)b.blur()});
+document.addEventListener('keydown',e=>{ const tag=e.target.tagName; if(tag==='INPUT'||tag==='SELECT')return;
+  if(e.code==='Space'){e.preventDefault();setPlay(!playing)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();seekBar(curBar()-1)}
+  else if(e.key==='ArrowRight'){e.preventDefault();seekBar(curBar()+1)}
+  else if(e.key==='s'||e.key==='S'){addPt()} });
+showPts(); markLoop(); seekTime(-1e9); requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
