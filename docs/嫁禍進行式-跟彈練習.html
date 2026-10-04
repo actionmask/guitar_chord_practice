@@ -111,12 +111,12 @@ svg.dia{width:92px;height:112px;flex:none}
       <span class="hint" id="fname">還沒選音樂時，會用內建節拍器照 110 bpm 走。</span>
     </div>
     <div class="row"><strong>開頭</strong>
-      <label>音樂從第 <input type="number" id="startbar" min="1" max="114" value="2"> 小節開始播放</label>
+      <label>音樂從第 <input type="number" id="startbar" min="1" max="114" value="1"> 小節開始播放</label>
       <label>音樂延遲 <input type="number" id="delay" step="0.01" min="-30" max="30" value="0.00" style="width:76px"> 秒</label>
       <span class="hint">指標走到這個小節後，再過「延遲」這麼多秒音樂才開始；填負數就是音樂提早開始。音樂開始前只有節拍聲。</span>
     </div>
     <div class="row"><strong>對齊</strong>
-      <label>第 <input type="number" id="syncbar" min="1" max="114" value="2"> 小節</label>
+      <label>第 <input type="number" id="syncbar" min="1" max="114" value="1"> 小節</label>
       <button id="sync">現在是這小節的第一拍 (S)</button>
       <button id="early" title="指標整體提早 20 毫秒">指標提早</button>
       <button id="late" title="指標整體延後 20 毫秒">指標延後</button>
@@ -158,7 +158,7 @@ const END=TOTAL*4;
 
 // ---- state ----
 const audio=$('audio'); let hasAudio=false, playing=false, clockT=0, lastNow=0, fileKey='';
-let bpm=110, pts=[{bar:2,t:0}], lastBeat=null, lastBar=0, actx=null;
+let bpm=110, pts=[{bar:1,t:-1.6}], lastBeat=null, lastBar=0, actx=null;
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 
 // ---- time <-> beat (piecewise through sync points) ----
@@ -293,7 +293,7 @@ $('file').onchange=async e=>{ const f=e.target.files[0]; if(!f)return; setPlay(f
   $('fname').textContent='處理音樂中…'; let src=f, exact=true;
   try{src=await toWav(f)}catch(err){exact=false}
   audio.src=URL.createObjectURL(src); audio.playbackRate=+$('rate').value; hasAudio=true; fileKey=f.name;
-  const s=store.get('sync:'+fileKey); pts=s&&s.pts&&s.pts.length?s.pts:[{bar:Math.min(TOTAL,Math.max(1,+$('startbar').value||2)),t:0}]; preT=0; if(s&&s.bpm){bpm=s.bpm;$('bpm').value=bpm}
+  const s=store.get('sync:'+fileKey); pts=s&&s.pts&&s.pts.length?s.pts:[{bar:1,t:-1.6}]; preT=0; if(s&&s.bpm){bpm=s.bpm;$('bpm').value=bpm}
   $('click').checked=false; $('fname').textContent=(s?'已載入，並套用上次存的對齊點。':'已載入。')+(exact?'':'這個檔案無法轉成精確定位的格式，跳小節時可能有些微誤差。');
   showPts(); seekTime(-1e9); };
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button'); if(b)b.blur()});
