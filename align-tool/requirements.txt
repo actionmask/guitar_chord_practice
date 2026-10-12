@@ -1,0 +1,7 @@
+synctoolbox>=1.4
+libfmp>=1.2
+librosa>=0.10
+numpy
+pandas
+scipy
+soundfile
