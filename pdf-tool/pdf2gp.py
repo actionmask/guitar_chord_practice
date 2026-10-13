@@ -137,7 +137,10 @@ def main():
         if a.swap: scored.reverse()
         else: scored.sort(key=lambda x: x[0])
         if len(scored) == 1:
-            names = [('Chords', 'Chd') if scored[0][0] > 1.0 else ('Solo', 'Solo')]
+            fn = os.path.basename(scored[0][3]).lower()
+            if re.search(r'solo|獨奏|主奏', fn): names = [('Solo', 'Solo')]          # the file name says which part it is
+            elif re.search(r'chord|和弦|伴奏|節奏', fn): names = [('Chords', 'Chd')]
+            else: names = [('Chords', 'Chd') if scored[0][0] > 1.0 else ('Solo', 'Solo')]
         else:
             names = [('Solo', 'Solo')] + [('Chords', 'Chd')] + [('Part %d' % (j + 3), 'P%d' % (j + 3)) for j in range(len(scored) - 2)]
         print(f'{title}' + (f' - {h["artist"]}' if h['artist'] else '') + f'  (KEY {h["key"]}, {h["tempo"]} bpm)')

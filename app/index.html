@@ -215,9 +215,9 @@ body.roll .sheet{width:max-content;min-width:100%}
 <div class="ytbox" id="ytbox" hidden><button id="ytmin" title="縮小或放大影片">–</button><div class="ytframe"></div></div>
 <main class="sheetwrap" id="wrap"><div class="grid" id="grid" hidden></div><div id="sheetbox"><div class="sheet" id="at"></div></div></main>
 
-<script src="alphaTab.min.js?v=44"></script>
-<script src="soundfont.js?v=44"></script>
-<script src="chords.js?v=44"></script>
+<script src="alphaTab.min.js?v=47"></script>
+<script src="soundfont.js?v=47"></script>
+<script src="chords.js?v=47"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -254,7 +254,7 @@ const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+'
 api.error.on(e=>{status('這個檔案讀不出來。支援 Guitar Pro（.gp3 .gp4 .gp5 .gpx .gp）和 MusicXML。',true)});
 api.soundFontLoad.on(e=>{ if(!ready&&e.total)status('載入吉他音色 '+Math.floor(e.loaded/e.total*100)+'%') });
 let needReload=false;
-api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status('可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v44）')});
+api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status('可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v47）')});
 api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
   $('title').textContent=s.title||'未命名'; 
   $('sub').textContent=[s.artist,s.tempo?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');

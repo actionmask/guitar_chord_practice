@@ -140,6 +140,7 @@ def tok(e,prev):
     if 'tu' in e['fx']: fx.append('tu 3')
     fx+=sorted(x for x in e['fx'] if x not in('d','tu'))
     if e.get('ch'): fx.append('ch "%s"'%e['ch'])
+    if e.get('label'): fx.append('txt "%s"'%e['label'])
     if e['notes']:
         ns=[('-' if n['tie'] else ('x' if n['f'] in 'Xx' else n['f']))+'.'+str(n['s'])+('{'+' '.join(dict.fromkeys(n['fx'] if not n['tie'] else [x for x in n['fx'] if x in ('sod','sou')]))+'}' if n.get('fx') and (not n['tie'] or any(x in ('sod','sou') for x in n['fx'])) else '') for n in sorted(e['notes'],key=lambda n:n['s'])]
     elif e['stem'] and prev: ns=['-.'+str(n['s']) for n in sorted(prev,key=lambda n:n['s'])]
@@ -182,6 +183,7 @@ def track(doc,pages,name,short,report):
             if lab in('H','P','sl.'):
                 cand=[e for e in ev if e['x']<x+1 and e['notes']]
                 if cand:
+                    cand[-1]['label']=lab   # the letter printed above the tab staff; written as beat text so it shows in the same place
                     for n in cand[-1]['notes']: n.setdefault('fx',[]).append('h' if lab!='sl.' else 'sl'); nfx+=1
             elif lab in BEND or lab=='fullfull':
                 cand=[e for e in real if e['x']<x+(9 if lab=='fullfull' else 3) and e['notes']]
@@ -248,7 +250,7 @@ def track(doc,pages,name,short,report):
                             fx=n.setdefault('fx',[])
                             if not any(x in fx for x in ('h','ss','sl','sib','sia')): fx.append('h')
                     ns=['%s.%d%s'%(n['f'],n['s'],('{%s}'%' '.join(dict.fromkeys(n['fx'])) if n.get('fx') else '')) for n in sorted(e['notes'],key=lambda n:n['s'])]
-                    toks.append((ns[0] if len(ns)==1 else '('+' '.join(ns)+')')+'.16{gr}')
+                    toks.append((ns[0] if len(ns)==1 else '('+' '.join(ns)+')')+('.16{gr txt "%s"}'%e['label'] if e.get('label') else '.16{gr}'))
                     continue
                 t=tok(e,prev)
                 if '?' in t: report.append('%s bar %d: odd duration %s'%(name,bi+1,t))
