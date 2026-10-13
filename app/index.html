@@ -215,9 +215,9 @@ body.roll .sheet{width:max-content;min-width:100%}
 <div class="ytbox" id="ytbox" hidden><button id="ytmin" title="縮小或放大影片">–</button><div class="ytframe"></div></div>
 <main class="sheetwrap" id="wrap"><div class="grid" id="grid" hidden></div><div id="sheetbox"><div class="sheet" id="at"></div></div></main>
 
-<script src="alphaTab.min.js"></script>
-<script src="soundfont.js"></script>
-<script src="chords.js"></script>
+<script src="alphaTab.min.js?v=44"></script>
+<script src="soundfont.js?v=44"></script>
+<script src="chords.js?v=44"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -254,7 +254,7 @@ const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+'
 api.error.on(e=>{status('這個檔案讀不出來。支援 Guitar Pro（.gp3 .gp4 .gp5 .gpx .gp）和 MusicXML。',true)});
 api.soundFontLoad.on(e=>{ if(!ready&&e.total)status('載入吉他音色 '+Math.floor(e.loaded/e.total*100)+'%') });
 let needReload=false;
-api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status('可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。')});
+api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status('可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v44）')});
 api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
   $('title').textContent=s.title||'未命名'; 
   $('sub').textContent=[s.artist,s.tempo?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');
@@ -446,7 +446,10 @@ const handler={
 function clock(){ ownClock=running&&mp3On(); if(ownClock){
     const tn=performance.now(), dt=Math.max(0,Math.min(.25,(tn-lastNow)/1000))*rate; lastNow=tn;
     if(V<PRE){ V+=dt*1000; if(V>=PRE){V=PRE; M.seek(0); M.play()} }
-    else if(!M.paused()||M.ended()) V=M.timeMs()+PRE;
+    else if(!M.paused()||M.ended()){ // phones report the audio position in coarse steps: run our own clock and pull it gently
+      // toward the audio position (snap if it is far off), never backwards, so the cursor moves smoothly and does not jump back
+      const A=M.timeMs()+PRE, P=V+dt*1000;
+      V=Math.abs(A-P)>150?A:Math.max(V,P+(A-P)*0.15); }
     const t=(V-PRE)/1000, bt=t2tick(t)/960, bi=Math.floor(bt+1e-6);
     if(bi!==lastClick){ if((lastClick!==null||(bt-bi)<.2)&&(t<0||$('metro').getAttribute('aria-pressed')==='true')) beep(((bi%4)+4)%4===0); lastClick=bi; }
     if(loopOn()){ const [a,b]=loopRange(), m=score.masterBars, vOf=tk=>PRE+a2t(tk)*1000; if(V>=vOf(m[b-1].start+m[b-1].calculateDuration())){ handler.seekTo(Math.max(0,vOf(m[a-1].start))); } }
@@ -566,13 +569,18 @@ function curNextX(bb){ try{ const b=bb.beat; if(isFinalBeat(b))return bb.onNotes
 // During a tied (held) note alphaTab reports the beat where the note was struck, which can be earlier on the line. Walk forward to the beat
 // that is actually sounding at the play position, so the cursor never jumps back.
 const curMoving=()=>playing||(typeof running!=='undefined'&&running);
-function curTick(){ let t=rk.tick; if(!ownClock&&rk.tps>0&&rk.at)t+=Math.min(0.3,(performance.now()-rk.at)/1000)*rk.tps; return t }
+function curTick(){ let t=rk.tick; if(!ownClock&&rk.tps>0&&rk.at)t+=Math.min(0.15,(performance.now()-rk.at)/1000)*rk.tps; return t }
+// On phones the player reports its position in coarse steps, so the page's estimate between reports can run slightly ahead
+// (into the next beat, or onto the next line at a line end) before a late report arrives. While playing, a report that is
+// only a little behind the beat already shown is ignored; a real jump back (seek, loop, restart) is far behind and passes.
+function curBehind(c,bb){ try{ if(!cur.bb||cur.c!==c)return false; const d=bb.beat.absolutePlaybackStart-cur.bb.beat.absolutePlaybackStart;
+  return d<0 && curTick()>cur.bb.beat.absolutePlaybackStart-480 }catch(e){ return false } }
 function curResolve(bb,t){ try{ let b=bb.beat, n=0; while(b.nextBeat&&b.nextBeat.absolutePlaybackStart<=t&&n++<64)b=b.nextBeat;
     if(b===bb.beat)return bb; return api.renderer.boundsLookup.findBeat(b)||bb }catch(e){ return bb } }
 try{ api.customCursorHandler={ onAttach(){}, onDetach(){},
-  placeBeatCursor(c,bb){ if(curMoving())bb=curResolve(bb,curTick()); if(cur.bb!==bb||cur.c!==c||!curMoving())curPlace(c,bb) },
+  placeBeatCursor(c,bb){ if(curMoving()){ bb=curResolve(bb,curTick()); if(curBehind(c,bb))return } if(cur.bb!==bb||cur.c!==c||!curMoving())curPlace(c,bb) },
   placeBarCursor(c,bb){ const r=bb.barBounds.masterBarBounds.visualBounds; c.setBounds(r.x,r.y,r.w,r.h) },
-  transitionBeatCursor(c,bb){ bb=curResolve(bb,curTick()); if(cur.bb!==bb||cur.c!==c)curPlace(c,bb) } } }catch(e){}
+  transitionBeatCursor(c,bb){ bb=curResolve(bb,curTick()); if(curBehind(c,bb))return; if(cur.bb!==bb||cur.c!==c)curPlace(c,bb) } } }catch(e){}
 function cursorFrame(){ requestAnimationFrame(cursorFrame); if(!cur.bb||!score||!curMoving())return;
   const t=curTick(); { const nb=curResolve(cur.bb,t); if(nb!==cur.bb)curPlace(cur.c,nb) } const bb=cur.bb;
   const b=bb.beat, d=b.playbackDuration||1, f=Math.max(0,Math.min(1,(t-b.absolutePlaybackStart)/d));

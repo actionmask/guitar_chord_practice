@@ -21,6 +21,7 @@
 ```
 app/          練習網頁本身（PWA），整個資料夾就是網站
 align-tool/   譜 ↔ 錄音自動對齊工具（Python + Node.js），產生對齊檔 .json
+pdf-tool/     老師的 PDF 吉他譜 → Guitar Pro (.gp) 轉檔工具
 .github/      GitHub Pages 自動部署設定
 ```
 
@@ -99,6 +100,19 @@ python align.py 歌名.gp 歌名.mp3           # 產生 歌名.json
 
 詳細說明、Windows 安裝的注意事項和準確度測試，見 [align-tool/README.md](align-tool/README.md)。
 
+## pdf-tool（PDF 轉 .gp）
+
+把老師給的 PDF 吉他譜（Guitar Pro 匯出的向量 PDF）轉成 .gp，和弦和 Solo 兩部分變成同一個檔案的兩軌。
+
+```bash
+cd pdf-tool
+pip install -r requirements.txt
+npm install
+python pdf2gp.py 老師的譜.pdf        # 每首歌一個 .gp
+```
+
+詳見 [pdf-tool/README.md](pdf-tool/README.md)。
+
 ## 換音色
 
 1. 把 General MIDI 的 .sf2 或 .sf3 檔放進 `app/`。
@@ -119,10 +133,14 @@ python align.py 歌名.gp 歌名.mp3           # 產生 歌名.json
 | `app/chords.js` | [chords-db](https://github.com/tombatossals/chords-db) 0.5.1 | MIT |
 | `app/font/Bravura.*` | [Bravura](https://github.com/steinbergmedia/bravura) 樂譜字型 | SIL OFL 1.1（見 `app/font/Bravura-OFL.txt`） |
 
-`app/alphaTab.min.js` 改過兩處，換成官方版的話這兩個問題會再出現：
+`app/alphaTab.min.js` 改過六處，換成官方版的話這些問題會再出現：
 
 1. 簡譜遇到整小節休止時不會當掉（`beatOfLowestNote`／`beatOfHighestNote` 改回傳該小節第一拍）。
 2. 單行排版時，最後一段譜的寬度算對，最後幾小節不會被切掉。
+3. 簡譜也畫出滑音的斜線（滑到下一個音、滑入、滑出），原版只在六線譜和五線譜上畫。
+4. 裝飾音連到主音的圓弧不標 H／P 字樣（跟 Guitar Pro 原譜一樣）。
+5. 簡譜裡被延音線連過去的音不再重寫一次數字，只留延音線（跟 Guitar Pro 原譜一樣；帶滑音的除外）。
+6. 六線譜的延音線畫成音符右邊的短弧，被延長的那一拍不寫數字，符桿從譜線下方開始（跟 Guitar Pro 原譜一樣）。
 
 依 MPL-2.0，修改過的 alphaTab 檔案仍以 MPL-2.0 授權。
 
