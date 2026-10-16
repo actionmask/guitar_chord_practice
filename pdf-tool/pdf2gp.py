@@ -10,6 +10,7 @@ usage:
     python pdf2gp.py 獨奏.pdf 和弦.pdf           -> parts in separate files are put together
     python pdf2gp.py 譜資料夾                     -> every PDF in the folder
     python pdf2gp.py 譜.pdf -o 輸出資料夾 --list  (--list only shows what was found)
+    python pdf2gp.py 譜.pdf --dump                (writes 譜.dump.txt: everything read from the PDF, no conversion)
 """
 import argparse, os, re, sys, json, subprocess, unicodedata, collections
 import pymupdf as fitz
@@ -85,6 +86,43 @@ def chordiness(doc, a, b):
     return 2 * lab + poly, len(bars)
 
 
+def dump(path, out_path):
+    """What the converter can get out of a PDF, page by page: every piece of text (with font, size and position)
+    and, per bar, what it understood (notes, rhythm, chords, sections, H/P/bends/P.M., slides)."""
+    doc = fitz.open(path); L = []
+    D = {'4': '全音符', '2': '二分', '1': '四分', '1/2': '八分', '1/4': '十六分', '1/8': '三十二分',
+         '3/2': '附點四分', '3/4': '附點八分', '3': '附點二分', '2/3': '三連音四分', '1/3': '三連音八分', '1/6': '三連音十六分', '4/3': '三連音二分'}
+    for i, p in enumerate(doc):
+        L.append('=' * 70); L.append(f'第 {i + 1} 頁')
+        h = header(p)
+        if h: L.append(f'  ★ 標題頁：歌名「{h["title"] or "(讀不出來)"}」 歌手「{h["artist"]}」 KEY {h["key"]}  {h["tempo"]} bpm   原文：{h["raw"]}')
+        systems, vl, fills, hs = tabpdf.systems_of(p)
+        L.append(f'  六線譜 {len(systems)} 行；直線 {len(vl)} 條、橫線 {len(hs)} 條、填色圖形 {len(fills)} 個、滑音斜線 {len(tabpdf.slide_lines(p))} 條')
+        L.append('  -- 頁面上的所有文字（y, x, 大小, 字型, 內容）--')
+        sp = []
+        for b in p.get_text('dict')['blocks']:
+            for l in b.get('lines', []):
+                for s in l['spans']:
+                    if s['text'].strip(): sp.append((s['bbox'], s['text'], s['font'], s['size']))
+        for bb, t, f, sz in sorted(sp, key=lambda x: (round(x[0][1] / 3), x[0][0])):
+            mark = '  (手寫，略過)' if f.startswith('.') else ''
+            L.append(f'    y{bb[1]:6.1f} x{bb[0]:6.1f}  {sz:4.1f}  {f[:24]:24s} {t!r}{mark}')
+        bars = tabpdf.convert(doc, [i], None)
+        if bars: L.append('  -- 認出來的小節 --')
+        for k, B in enumerate(bars):
+            head = f'    第 {B["sys"]} 行 第 {k + 1} 小節' + (f'（譜上小節號 {B["num"]}）' if B['num'] else '')
+            extra = [x for x in [('段落 ' + '、'.join(B['sect'])) if B['sect'] else '', ('和弦 ' + ' '.join(c for _, c in B['chords'])) if B['chords'] else '',
+                                 ('標記 ' + ' '.join(t for _, t in B['misc'])) if B['misc'] else '', ('調號 ' + B['key']) if B['key'] else ''] if x]
+            L.append(head + ('：' + '；'.join(extra) if extra else ''))
+            for e in B['ev']:
+                d = e['d']; ds = '裝飾音' if d is None else D.get(str(d), str(d) + ' 拍')
+                ns = ' '.join(('(' if n['tie'] else '') + f'{n["s"]}弦{n["f"]}' + (')' if n['tie'] else '') for n in sorted(e['notes'], key=lambda n: n['s']))
+                if not ns: ns = '休止' if e['rest'] else '延音（接前一拍）'
+                L.append(f'        x{e["x"]:6.1f}  {ds:8s} {ns}')
+    open(out_path, 'w', encoding='utf-8').write('\n'.join(L) + '\n')
+    return out_path
+
+
 def safe_name(s):
     s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', s).strip(' .')
     return s or 'song'
@@ -97,6 +135,7 @@ def main():
     ap.add_argument('--list', action='store_true', help='only list the songs and parts that were found')
     ap.add_argument('--title', action='append', default=[], help='name for a song whose title cannot be read, in order (repeatable); "歌名 - 歌手" also sets the artist')
     ap.add_argument('--swap', action='store_true', help='Solo / Chords were guessed the wrong way round: take the parts in page order, first = Solo')
+    ap.add_argument('--dump', action='store_true', help='write PDF名.dump.txt: every text and symbol read from each page, and what each bar was understood as (no conversion)')
     ap.add_argument('--keep-tex', action='store_true', help='also keep the intermediate .alphatex text')
     a = ap.parse_args()
     pdfs = []
@@ -106,6 +145,9 @@ def main():
         else: sys.exit(f'not found: {x}')
     if not pdfs: sys.exit('no PDF files given')
     a.pdf = pdfs
+    if a.dump:
+        for x in a.pdf: print('wrote', dump(x, os.path.join(a.out or os.path.dirname(os.path.abspath(x)), os.path.splitext(os.path.basename(x))[0] + '.dump.txt')))
+        return
 
     parts = find_parts(a.pdf)
     if not parts: sys.exit('No title page found (a page with the song title and a "KEY: ... bpm" line). Is this one of the teacher\'s PDFs?')

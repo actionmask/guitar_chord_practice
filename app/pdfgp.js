@@ -281,6 +281,56 @@
     }
     return bars;
   }
+
+  // chord boxes drawn on the page -> [[name, frets]], frets from string 1 (high e) to string 6, -1 = muted
+  function chordDiagrams(pm) {
+    if (pm._cd) return pm._cd;
+    const fills = pm.drawings.filter(g => g.type !== 's').map(g => [g.rect[0], g.rect[1], g.rect[2], g.rect[3], kindsOf(g), g.items.length]);
+    const spans = pm.spans.map(s => [s.bbox, s.text.trim(), s.font, s.size]);
+    const vert = fills.filter(f => f[4] === 're' && f[2] - f[0] < 0.8 && 12 < f[3] - f[1] && f[3] - f[1] < 60).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    const groups = [];
+    for (const v of vert) {
+      const g = groups.find(g => Math.abs(g[0][1] - v[1]) < 0.5 && Math.abs(g[0][3] - v[3]) < 0.5 && 0 < v[0] - g[g.length - 1][0] && v[0] - g[g.length - 1][0] < 8);
+      if (g) g.push(v); else groups.push([v]);
+    }
+    const out = [];
+    for (const g of groups) {
+      if (g.length !== 6) continue;
+      const xs = g.map(f => (f[0] + f[2]) / 2), gaps = xs.slice(1).map((x, i) => x - xs[i]);
+      if (!(2.5 < Math.min(...gaps) && Math.max(...gaps) - Math.min(...gaps) < 0.6 && Math.max(...gaps) < 7)) continue;
+      const left = xs[0], right = xs[5], top = g[0][1], bot = g[0][3], sp = gaps.reduce((a, b) => a + b, 0) / 5;
+      const fy = [...new Set(fills.filter(f => f[4] === 're' && f[3] - f[1] < 3 && f[0] <= left + 0.6 && f[2] >= right - 0.6 && top - 0.6 <= f[1] && f[3] <= bot + 0.6).map(f => pyRound((f[1] + f[3]) / 2, 1)))].sort((a, b) => a - b);
+      const ys = []; for (const y of fy) if (!ys.length || y - ys[ys.length - 1] > 1.0) ys.push(y);
+      if (ys.length < 3) continue;
+      const row = y => { for (let i = 0; i < ys.length - 1; i++) if (ys[i] <= y && y < ys[i + 1]) return i + 1; return null; };
+      const near = x => { let b = 0; for (let i = 1; i < 6; i++) if (Math.abs(xs[i] - x) < Math.abs(xs[b] - x)) b = i; return b; };
+      let base = 1;
+      for (const [bb, t] of spans) if (/^\d+$/.test(t) && left - 9 < bb[2] && bb[2] <= left + 0.5 && ys[0] - 3 < (bb[1] + bb[3]) / 2 && (bb[1] + bb[3]) / 2 < ys[1] + 3) base = parseInt(t, 10);
+      const fr = [null, null, null, null, null, null], mute = [false, false, false, false, false, false], barre = [];
+      for (const f of fills) {
+        const w = f[2] - f[0], h = f[3] - f[1], cx = (f[0] + f[2]) / 2, cy = (f[1] + f[3]) / 2;
+        if (f[4] === 're' && (w < 0.8 || h < 0.8)) continue;
+        if (2 < w && w < 5.5 && 2 < h && h < 5.5 && left - 2 < cx && cx < right + 2 && ys[0] < cy && cy < ys[ys.length - 1] && f[4].includes('c')) {
+          const r = row(cy); if (r) { const i = near(cx); fr[i] = Math.max(fr[i] || 0, base + r - 1); }
+        } else if (w > 1.5 * sp && 1.5 < h && h < 5 && left - 3 < f[0] && f[2] < right + 3 && ys[0] < cy && cy < ys[ys.length - 1]) {
+          const r = row(cy);
+          if (r && !barre.includes(base + r - 1)) barre.push(base + r - 1);
+          if (r) for (let i = 0; i < 6; i++) if (f[0] - 1 <= xs[i] && xs[i] <= f[2] + 1 && (fr[i] === null || fr[i] < base + r - 1)) fr[i] = base + r - 1;
+        } else if (2 < w && w < 6 && 2 < h && h < 6 && top - 10 < cy && cy < top - 0.5 && left - 2 < cx && cx < right + 2) {
+          const i = near(cx); if (!f[4].includes('c') && f[5] >= 6) mute[i] = true;
+        }
+      }
+      const frets = fr.map((v, i) => v === null ? (mute[i] ? -1 : 0) : v);
+      if (frets.every(v => v <= 0)) continue;
+      const strip = t => t.replace(/\s*\(.*$/, '');
+      const cand = mergedText(spans.filter(s => left - 8 < (s[0][0] + s[0][2]) / 2 && (s[0][0] + s[0][2]) / 2 < right + 8 && top - 30 < (s[0][1] + s[0][3]) / 2 && (s[0][1] + s[0][3]) / 2 < top))
+        .filter(l => l[3] > 7.5 && CHORD.test(strip(l[1])));
+      if (!cand.length) continue;
+      let best = cand[0]; for (const l of cand) if (l[0][3] > best[0][3]) best = l;
+      out.push([strip(best[1]), frets.slice().reverse(), base, barre.slice().sort((a, b) => a - b)]);
+    }
+    return (pm._cd = out);
+  }
   const DUR = { '4': '1', '2': '2', '1': '4', '1/2': '8', '1/4': '16', '1/8': '32' };
   const uniq = a => [...new Set(a)];
   function tok(e, prev) {
@@ -435,10 +485,17 @@
       const t0 = tracks.find(t => t[2][i].key); const k = t0 ? t0[2][i].key : null;
       if (k) { const ks = k.slice(2).toLowerCase() + (k[0] === '6' ? 'minor' : ''); for (const t of tracks) t[3][i] = '\\ks ' + ks + ' ' + t[3][i]; }
     }
+    // chord boxes drawn in the PDF -> chord definitions; the most common fingering per chord name wins
+    const seen = new Map();
+    for (const [, , pms] of parts) for (const pm of pms) for (const [nm, fr, base, barre] of chordDiagrams(pm)) {
+      if (!seen.has(nm)) seen.set(nm, new Map()); const c = seen.get(nm), k = fr.join(',') + '|' + base + '|' + barre.join(' '); c.set(k, (c.get(k) || 0) + 1);
+    }
+    const defs = [...seen].map(([nm, c]) => { let bk = null, bv = 0; for (const [k, v] of c) if (v > bv) { bv = v; bk = k; } const [fs, b, br] = bk.split('|'), base = +b, props = (base > 1 ? ['firstfret ' + base] : []).concat(br ? ['barre ' + br] : []);
+      return '\\chord ("' + nm + '" ' + fs.split(',').map(x => +x < 0 ? 'x' : x).join(' ') + ')' + (props.length ? ' {' + props.join(' ') + '}' : ''); });
     const esc = s => s.replace(/"/g, "'");
     const tex = ['\\title "' + esc(title) + '"', '\\artist "' + esc(artist) + '"', '\\tempo ' + tempo, '.'];
     tracks.forEach(([name, short, , lines], ti) => {
-      tex.push('\\track ("' + name + '" "' + short + '")', '\\staff {tabs}', '\\tuning (E4 B3 G3 D3 A2 E2)');
+      tex.push('\\track ("' + name + '" "' + short + '")', '\\staff {tabs}', '\\tuning (E4 B3 G3 D3 A2 E2)', ...defs);
       if (ti === 0) tex.push('\\ts 4 4');
       lines.forEach((l, i) => tex.push(l + (i < n - 1 ? ' |' : '') + '  // ' + (i + 1)));
     });

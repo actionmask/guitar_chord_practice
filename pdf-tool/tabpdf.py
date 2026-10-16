@@ -130,6 +130,68 @@ def convert(doc,pages,log):
                 keyl=[l[1] for l in lab if re.fullmatch(r'[16]=[A-Ga-g][#b]?',l[1])]
                 bars.append({'key':keyl[0] if keyl else None,'y0':y0,'page':pn+1,'sys':si+1,'num':num[0] if num else None,'x':(a,b),'thick':bl[i][1]>1.2,'ev':evs,'chords':chords,'sect':sect,'misc':misc})
     return bars
+def chord_diagrams(page):
+    """Chord boxes drawn on the page (6 strings x a few frets, dots, barre, x/o above, start fret on the left) with
+    the chord name above them. Returns [(name, frets, start fret, barre frets)], frets from string 1 (high e) to string 6, -1 = muted."""
+    fills = []
+    for g in page.get_drawings():
+        if g['type'] == 's': continue
+        r = g['rect']; fills.append((r.x0, r.y0, r.x1, r.y1, ''.join(sorted(set(i[0] for i in g['items']))), len(g['items'])))
+    spans = []
+    for b in page.get_text('dict')['blocks']:
+        for l in b.get('lines', []):
+            for s in l['spans']:
+                if s['text'].strip(): spans.append((s['bbox'], s['text'].strip(), s['font'], s['size']))
+    return find_diagrams(fills, spans)
+
+def find_diagrams(fills, spans):
+    vert = [f for f in fills if f[4] == 're' and f[2] - f[0] < 0.8 and 12 < f[3] - f[1] < 60]
+    groups = []
+    for v in sorted(vert, key=lambda f: (f[1], f[0])):
+        g = next((g for g in groups if abs(g[0][1] - v[1]) < 0.5 and abs(g[0][3] - v[3]) < 0.5 and 0 < v[0] - g[-1][0] < 8), None)
+        if g: g.append(v)
+        else: groups.append([v])
+    out = []
+    for g in groups:
+        if len(g) != 6: continue
+        xs = [(f[0] + f[2]) / 2 for f in g]; gaps = [b - a for a, b in zip(xs, xs[1:])]
+        if not (2.5 < min(gaps) and max(gaps) - min(gaps) < 0.6 and max(gaps) < 7): continue
+        left, right, top, bot, sp = xs[0], xs[-1], g[0][1], g[0][3], sum(gaps) / 5
+        fy = sorted(set(round((f[1] + f[3]) / 2, 1) for f in fills if f[4] == 're' and f[3] - f[1] < 3 and f[0] <= left + 0.6 and f[2] >= right - 0.6 and top - 0.6 <= f[1] and f[3] <= bot + 0.6))
+        ys = []
+        for y in fy:
+            if not ys or y - ys[-1] > 1.0: ys.append(y)
+        if len(ys) < 3: continue
+        row = lambda y: next((i + 1 for i in range(len(ys) - 1) if ys[i] <= y < ys[i + 1]), None)
+        near = lambda x: min(range(6), key=lambda i: abs(xs[i] - x))
+        base = 1
+        for bb, t, f, sz in spans:
+            if t.isdigit() and left - 9 < bb[2] <= left + 0.5 and ys[0] - 3 < (bb[1] + bb[3]) / 2 < ys[1] + 3: base = int(t)
+        fr = [None] * 6; mute = [False] * 6; barre = []
+        for f in fills:
+            w, h, cx, cy = f[2] - f[0], f[3] - f[1], (f[0] + f[2]) / 2, (f[1] + f[3]) / 2
+            if f[4] == 're' and (w < 0.8 or h < 0.8): continue
+            if 2 < w < 5.5 and 2 < h < 5.5 and left - 2 < cx < right + 2 and ys[0] < cy < ys[-1] and 'c' in f[4]:      # a dot
+                r = row(cy)
+                if r: i = near(cx); fr[i] = max(fr[i] or 0, base + r - 1)
+            elif w > 1.5 * sp and 1.5 < h < 5 and left - 3 < f[0] and f[2] < right + 3 and ys[0] < cy < ys[-1]:        # a barre
+                r = row(cy)
+                if r:
+                    if base + r - 1 not in barre: barre.append(base + r - 1)
+                    for i in range(6):
+                        if f[0] - 1 <= xs[i] <= f[2] + 1 and (fr[i] is None or fr[i] < base + r - 1): fr[i] = base + r - 1
+            elif 2 < w < 6 and 2 < h < 6 and top - 10 < cy < top - 0.5 and left - 2 < cx < right + 2:                  # x / o above the box
+                i = near(cx)
+                if 'c' not in f[4] and f[5] >= 6: mute[i] = True
+        frets = [(-1 if mute[i] else 0) if fr[i] is None else fr[i] for i in range(6)]   # index 0 = string 6 (left)
+        if all(v <= 0 for v in frets): continue
+        cand = [l for l in merged_text([sp_ for sp_ in spans if left - 8 < (sp_[0][0] + sp_[0][2]) / 2 < right + 8 and top - 30 < (sp_[0][1] + sp_[0][3]) / 2 < top])
+                if l[3] > 7.5 and CHORD.match(re.sub(r'\s*\(.*$', '', l[1]))]
+        if not cand: continue
+        name = re.sub(r'\s*\(.*$', '', max(cand, key=lambda l: l[0][3])[1])
+        out.append((name, frets[::-1], base, tuple(sorted(barre))))
+    return out
+
 def tok(e,prev):
     D={Fr(4):'1',Fr(2):'2',Fr(1):'4',Fr(1,2):'8',Fr(1,4):'16',Fr(1,8):'32'}
     d=e['d']; base=d
@@ -289,9 +351,20 @@ def build_alphatex(title, artist, tempo, parts, report):
         if k:
             ks = k[2:].lower() + ('minor' if k[0] == '6' else '')
             for t in tracks: t[3][i] = '\\ks %s ' % ks + t[3][i]
+    # chord boxes drawn in the PDF -> chord definitions (the practice page shows these fingerings); the most common
+    # fingering per chord name wins
+    seen = {}
+    for name, short, doc, pages in parts:
+        for pn in pages:
+            for nm, fr, base, barre in chord_diagrams(doc[pn]): seen.setdefault(nm, collections.Counter())[(tuple(fr), base, barre)] += 1
+    defs = []
+    for nm, c in seen.items():
+        fr, base, barre = c.most_common(1)[0][0]
+        props = (['firstfret %d' % base] if base > 1 else []) + (['barre ' + ' '.join(map(str, barre))] if barre else [])
+        defs.append('\\chord ("%s" %s)' % (nm, ' '.join('x' if v < 0 else str(v) for v in fr)) + (' {%s}' % ' '.join(props) if props else ''))
     esc = lambda s: s.replace('"', "'")
     tex = ['\\title "%s"' % esc(title), '\\artist "%s"' % esc(artist), '\\tempo %d' % tempo, '.']
     for ti, (name, short, bars, lines) in enumerate(tracks):
-        tex += ['\\track ("%s" "%s")' % (name, short), '\\staff {tabs}', '\\tuning (E4 B3 G3 D3 A2 E2)'] + (['\\ts 4 4'] if ti == 0 else [])
+        tex += ['\\track ("%s" "%s")' % (name, short), '\\staff {tabs}', '\\tuning (E4 B3 G3 D3 A2 E2)'] + defs + (['\\ts 4 4'] if ti == 0 else [])
         tex += [l + (' |' if i < n - 1 else '') + '  // %d' % (i + 1) for i, l in enumerate(lines)]
     return '\n'.join(tex) + '\n', n

@@ -109,6 +109,7 @@ python align.py 歌名.gp 歌名.mp3           # 產生 歌名.json
 - 只有一首時直接打開，要留著再按「存入歌單」。
 - 歌單裡已經有同名的歌（例如之前匯入的 `嫁禍進行式.gp`），會換成新轉的譜，MP3 和對齊設定保留。
 - 歌名讀不出來時會請你輸入，可以寫「歌名 - 歌手」。
+- 譜上畫的和弦指法圖也會讀進來，和弦面板會顯示老師的按法（標「譜檔」）。
 - 轉好後可以按「下載 .gp」存檔。
 
 轉檔程式是 `app/pdfgp.js`（用 [pdf.js](https://github.com/mozilla/pdf.js) 讀 PDF），規則和 `pdf-tool/` 的 Python 版一樣，兩邊轉出來的譜相同。改其中一邊時，另一邊也要跟著改。
@@ -147,7 +148,7 @@ python pdf2gp.py 老師的譜.pdf        # 每首歌一個 .gp
 | `app/pdfjs/` | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38（legacy build） | Apache-2.0（見 `app/pdfjs/LICENSE`） |
 | `app/font/Bravura.*` | [Bravura](https://github.com/steinbergmedia/bravura) 樂譜字型 | SIL OFL 1.1（見 `app/font/Bravura-OFL.txt`） |
 
-`app/alphaTab.min.js` 改過六處，換成官方版的話這些問題會再出現：
+`app/alphaTab.min.js` 改過八處，換成官方版的話這些問題會再出現：
 
 1. 簡譜遇到整小節休止時不會當掉（`beatOfLowestNote`／`beatOfHighestNote` 改回傳該小節第一拍）。
 2. 單行排版時，最後一段譜的寬度算對，最後幾小節不會被切掉。
@@ -155,6 +156,8 @@ python pdf2gp.py 老師的譜.pdf        # 每首歌一個 .gp
 4. 六線譜的搥勾弧線上不標 H／P 字樣；pdf-tool 把原譜印的 H／P／sl. 寫成文字，網頁把它畫在六線譜正上方（跟原譜一樣）。
 5. 簡譜裡被延音線連過去的音不再重寫一次數字，只留延音線（跟 Guitar Pro 原譜一樣；帶滑音的除外）。
 6. 六線譜的延音線畫成音符右邊的短弧，被延長的那一拍不寫數字，符桿從譜線下方開始（跟 Guitar Pro 原譜一樣）。
+7. 段落名稱（Intro、主歌…）自己佔一行，不再跟和弦名稱擠在同一行互相蓋住。
+8. 和弦指法圖上方只畫 x／o，不再列出每條弦的格數（跟老師的 PDF 一樣）。
 
 依 MPL-2.0，修改過的 alphaTab 檔案仍以 MPL-2.0 授權。
 
