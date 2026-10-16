@@ -223,10 +223,10 @@ body.roll .sheet{width:max-content;min-width:100%}
 <div class="ytbox" id="ytbox" hidden><button id="ytmin" title="縮小或放大影片">–</button><div class="ytframe"></div></div>
 <main class="sheetwrap" id="wrap"><div class="grid" id="grid" hidden></div><div id="sheetbox"><div class="sheet" id="at"></div></div></main>
 
-<script src="alphaTab.min.js?v=50"></script>
-<script src="soundfont.js?v=50"></script>
-<script src="chords.js?v=50"></script>
-<script src="pdfgp.js?v=50"></script>
+<script src="alphaTab.min.js?v=51"></script>
+<script src="soundfont.js?v=51"></script>
+<script src="chords.js?v=51"></script>
+<script src="pdfgp.js?v=51"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -263,7 +263,7 @@ const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+'
 api.error.on(e=>{status('這個檔案讀不出來。支援 Guitar Pro（.gp3 .gp4 .gp5 .gpx .gp）和 MusicXML。',true)});
 api.soundFontLoad.on(e=>{ if(!ready&&e.total)status('載入吉他音色 '+Math.floor(e.loaded/e.total*100)+'%') });
 let needReload=false;
-api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status(pdfNote&&Date.now()-pdfNoteT<30000?pdfNote:'可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v50）')});
+api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status(pdfNote&&Date.now()-pdfNoteT<30000?pdfNote:'可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v51）')});
 api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
   $('title').textContent=s.title||'未命名'; 
   $('sub').textContent=[s.artist,s.tempo?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');
@@ -278,7 +278,9 @@ api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
   if(pendingSong){ const ps=pendingSong; pendingSong=null;
     if(ps.ytId){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|yt:'+ps.ytId,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); const sel=ps.src==='yt'||!ps.mp3; setTimeout(()=>{ if(sel)loadingSong=true; loadYT(ps.ytId,sel) },0) }
     if(ps.mp3&&ps.src==='yt'&&ps.ytId){ setTimeout(()=>setMp3(new Uint8Array(ps.mp3.slice(0)),ps.mp3Name,false),0) }
-    else if(ps.mp3){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|'+ps.mp3Name,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); loadingSong=true; setTimeout(()=>setMp3(new Uint8Array(ps.mp3.slice(0)),ps.mp3Name),0) } else setTimeout(applyAudio,0) }
+    else if(ps.mp3){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|'+ps.mp3Name,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); loadingSong=true; setTimeout(()=>setMp3(new Uint8Array(ps.mp3.slice(0)),ps.mp3Name),0) }
+    else if(!ps.ytId&&embeddedAudio(s)){ loadingSong=true; useEmbedded(s) } else setTimeout(applyAudio,0) }
+  else if(embeddedAudio(s)) useEmbedded(s);
   else if(mp3&&$('src').value==='mp3'){ let v=null; try{v=JSON.parse(store.get(key(),'null'))}catch(e){} SP=null; if(v&&(v.sp||(isFinite(v.delay)&&v.bpm)))applySyncRec(v); else spUI(); setTimeout(applyAudio,0) }
 });
 api.playerStateChanged.on(e=>{playing=e.state===alphaTab.synth.PlayerState.Playing;$('play').textContent=playing?'暫停':'播放'; $('play').classList.toggle('on',playing); $('play').setAttribute('aria-label',playing?'暫停':'播放');wake(playing)});
@@ -648,6 +650,19 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 document.addEventListener('keydown',e=>{const tag=e.target.tagName;if(tag==='INPUT'||tag==='SELECT')return;if(e.code==='Space'&&ready){e.preventDefault();api.playPause()}else if(e.key==='s'||e.key==='S'){doSync()}});
 if(!SOUNDFONT_FILE)try{const s=atob(window.SF2_B64||''),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);window.__sf=u;let sent=0,done=false;const t0=Date.now();api.soundFontLoaded.on(()=>{done=true});const go=()=>{if(done)return;try{if(!sent&&api.player&&(api.player.isReady||Date.now()-t0>4000)){api.loadSoundFont(u.slice());sent=Date.now()}else if(sent&&Date.now()-sent>12000)sent=0}catch(e){}setTimeout(go,250)};go()}catch(e){status('吉他音色沒有載入成功，請重新整理頁面。',true)}
 
+// ---- Guitar Pro 8 files can carry their own recording (the "audio track") and the sync points set in Guitar Pro:
+// play that recording and follow those sync points, one point per bar, straight lines in between.
+function embeddedAudio(s){ const raw=s&&s.backingTrack&&s.backingTrack.rawAudioFile; if(!raw||raw.length<1000)return null;
+  const pts=[]; for(const m of s.masterBars)if(m.syncPoints)for(const p of m.syncPoints){ const v=p.syncPointValue; if(v&&!(v.barOccurence>0)&&isFinite(v.millisecondOffset))pts.push({tick:m.start+(p.ratioPosition||0)*m.calculateDuration(),t:v.millisecondOffset/1000}) }
+  pts.sort((a,b)=>a.tick-b.tick); const bpm=s.tempo||120;
+  const sec=tk=>{ if(!pts.length)return tk/960*60/bpm; if(pts.length===1)return pts[0].t+(tk-pts[0].tick)/960*60/bpm;
+    let i=0; while(i<pts.length-2&&pts[i+1].tick<=tk)i++; const p=pts[i],q=pts[i+1]; return p.t+(tk-p.tick)*(q.t-p.t)/Math.max(1,q.tick-p.tick) };
+  return {bytes:new Uint8Array(raw), name:(s.title||'錄音')+'（譜檔內建）.mp3', n:pts.length, sp:s.masterBars.map(m=>[m.index+1,0,Math.round(sec(m.start)*1000)/1000])} }
+function useEmbedded(s){ const e=embeddedAudio(s); if(!e)return; const k='gp:sync:'+(s.title||'')+'|'+e.name;
+  if(!store.get(k,''))store.set(k,JSON.stringify({start:firstNoteBar(s),delay:0,bpm:s.tempo||120,sp:e.sp}));   // keep the user's own corrections from earlier
+  pdfNote='這個譜檔裡有錄音，已改用這段錄音播放'+(e.n?'，並照 Guitar Pro 裡設好的 '+e.n+' 個對齊點跟著走':'')+'。要聽合成音色，把「聲音」改成「合成」。'; pdfNoteT=Date.now();
+  setTimeout(()=>setMp3(e.bytes,e.name),0) }
+
 // ---- song list: scores, MP3s and alignment kept on this device (IndexedDB)
 let lastGp=null, pendingSong=null, songs=[], curSong=null, db=null;
 function idb(){ return new Promise((res,rej)=>{ if(db)return res(db); let r; try{r=indexedDB.open('gp-practice',1)}catch(e){return rej(e)}
@@ -717,7 +732,7 @@ if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname
 // ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
 // pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
 let pdfjsLib=null, pdfNote='', pdfNoteT=0, dlUrl='';
-async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=50'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=50'; return pdfjsLib=m }
+async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=51'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=51'; return pdfjsLib=m }
 function askText(msg,val){ return new Promise(res=>{ const box=$('ask'), inp=$('askin'); $('askmsg').textContent=msg; inp.value=val; box.hidden=false; setTimeout(()=>{inp.focus();inp.select()},50);
   const done=v=>{ box.hidden=true; $('askok').onclick=$('askno').onclick=inp.onkeydown=null; res(v) };
   $('askok').onclick=()=>done(inp.value.trim()||val); $('askno').onclick=()=>done(val);
