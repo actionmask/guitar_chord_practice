@@ -7,6 +7,7 @@
 ## 功能
 
 - **讀譜**：Guitar Pro（.gp / .gp3–.gp7 / .gpx）、MusicXML 等格式，用 [alphaTab](https://github.com/CoderLine/alphaTab) 顯示與播放。
+- **直接開老師的 PDF 譜**：「開啟譜檔 / PDF」選 PDF，就在瀏覽器裡轉成 .gp（和弦、Solo 兩軌），不用裝 Python。可以一次選好幾個檔案（例如 Solo 和和弦分開的兩個 PDF）。
 - **三種聲音來源**：合成音色、MP3（也可貼 base64）、YouTube 影片。
 - **和弦面板**：目前的大和弦、下一個和弦、指型圖（常見按法／封閉和弦／強力和弦），節拍燈跟著拍子閃。
 - **顯示方式**：只看六線譜、六線譜＋簡譜、和弦方格。
@@ -21,7 +22,7 @@
 ```
 app/          練習網頁本身（PWA），整個資料夾就是網站
 align-tool/   譜 ↔ 錄音自動對齊工具（Python + Node.js），產生對齊檔 .json
-pdf-tool/     老師的 PDF 吉他譜 → Guitar Pro (.gp) 轉檔工具
+pdf-tool/     老師的 PDF 吉他譜 → Guitar Pro (.gp) 轉檔工具（Python 版；網頁裡也能直接轉）
 .github/      GitHub Pages 自動部署設定
 ```
 
@@ -100,7 +101,19 @@ python align.py 歌名.gp 歌名.mp3           # 產生 歌名.json
 
 詳細說明、Windows 安裝的注意事項和準確度測試，見 [align-tool/README.md](align-tool/README.md)。
 
-## pdf-tool（PDF 轉 .gp）
+## PDF 轉 .gp
+
+**在網頁裡**：按「開啟譜檔 / PDF」選老師的 PDF。
+
+- 一個 PDF 有好幾首歌時，全部存進歌單，並打開第一首。
+- 只有一首時直接打開，要留著再按「存入歌單」。
+- 歌單裡已經有同名的歌（例如之前匯入的 `嫁禍進行式.gp`），會換成新轉的譜，MP3 和對齊設定保留。
+- 歌名讀不出來時會請你輸入，可以寫「歌名 - 歌手」。
+- 轉好後可以按「下載 .gp」存檔。
+
+轉檔程式是 `app/pdfgp.js`（用 [pdf.js](https://github.com/mozilla/pdf.js) 讀 PDF），規則和 `pdf-tool/` 的 Python 版一樣，兩邊轉出來的譜相同。改其中一邊時，另一邊也要跟著改。
+
+**Python 版（pdf-tool）**：
 
 把老師給的 PDF 吉他譜（Guitar Pro 匯出的向量 PDF）轉成 .gp，和弦和 Solo 兩部分變成同一個檔案的兩軌。
 
@@ -131,6 +144,7 @@ python pdf2gp.py 老師的譜.pdf        # 每首歌一個 .gp
 | `app/alphaTab.min.js` | [alphaTab](https://github.com/CoderLine/alphaTab) 1.8.4 | MPL-2.0 |
 | `app/soundfont.js` | Sonivox EAS GM Wavetable（轉成 base64） | Apache-2.0 |
 | `app/chords.js` | [chords-db](https://github.com/tombatossals/chords-db) 0.5.1 | MIT |
+| `app/pdfjs/` | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38（legacy build） | Apache-2.0（見 `app/pdfjs/LICENSE`） |
 | `app/font/Bravura.*` | [Bravura](https://github.com/steinbergmedia/bravura) 樂譜字型 | SIL OFL 1.1（見 `app/font/Bravura-OFL.txt`） |
 
 `app/alphaTab.min.js` 改過六處，換成官方版的話這些問題會再出現：

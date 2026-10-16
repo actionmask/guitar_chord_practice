@@ -33,6 +33,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15p
 button,input,select{font:inherit;color:inherit}
 button,select,.filebtn{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;min-height:38px}
 button:hover,.filebtn:hover{border-color:var(--accent)}
+a.filebtn{color:inherit;text-decoration:none;display:inline-flex;align-items:center}
+.ask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+.ask>div{background:var(--panel);color:var(--ink);border-radius:10px;padding:16px;width:min(30em,100%);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.ask input{width:100%;box-sizing:border-box;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:6px}
+.ask .askbtn{text-align:right;margin:12px 0 0}
+.ask .pri{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 button:focus-visible,select:focus-visible,input:focus-visible,.filebtn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 button:disabled{opacity:.5;cursor:default}
 button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700;min-width:84px}
@@ -157,9 +163,11 @@ body.roll .sheet{width:max-content;min-width:100%}
     <label>歌單 <select id="song" style="max-width:15em"><option value="">歌單是空的</option></select></label>
     <button id="savesong">存入歌單</button>
     <button id="delsong" disabled>刪除</button>
-    <label class="filebtn">開啟譜檔<input type="file" id="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml,.mxl,.cap,application/octet-stream,*/*"></label>
+    <label class="filebtn">開啟譜檔 / PDF<input type="file" id="file" multiple accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml,.mxl,.cap,.pdf,application/pdf,application/octet-stream,*/*"></label>
     <label class="filebtn">匯入歌曲包 (zip)<input type="file" id="zip" accept=".zip,application/zip"></label>
+    <a class="filebtn" id="dlgp" hidden download>下載 .gp</a>
   </div>
+  <div class="ask" id="ask" hidden><div role="dialog" aria-labelledby="askmsg"><p id="askmsg"></p><input id="askin" type="text"><p class="askbtn"><button id="askno">用這個名字</button> <button id="askok" class="pri">確定</button></p></div></div>
   <div class="row xport" id="xport">
     <button class="primary" id="play" disabled title="播放／暫停" aria-label="播放">播放</button>
     <button id="stop" disabled title="重來" aria-label="重來">重來</button>
@@ -215,9 +223,10 @@ body.roll .sheet{width:max-content;min-width:100%}
 <div class="ytbox" id="ytbox" hidden><button id="ytmin" title="縮小或放大影片">–</button><div class="ytframe"></div></div>
 <main class="sheetwrap" id="wrap"><div class="grid" id="grid" hidden></div><div id="sheetbox"><div class="sheet" id="at"></div></div></main>
 
-<script src="alphaTab.min.js?v=47"></script>
-<script src="soundfont.js?v=47"></script>
-<script src="chords.js?v=47"></script>
+<script src="alphaTab.min.js?v=48"></script>
+<script src="soundfont.js?v=48"></script>
+<script src="chords.js?v=48"></script>
+<script src="pdfgp.js?v=48"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -254,7 +263,7 @@ const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+'
 api.error.on(e=>{status('這個檔案讀不出來。支援 Guitar Pro（.gp3 .gp4 .gp5 .gpx .gp）和 MusicXML。',true)});
 api.soundFontLoad.on(e=>{ if(!ready&&e.total)status('載入吉他音色 '+Math.floor(e.loaded/e.total*100)+'%') });
 let needReload=false;
-api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status('可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v47）')});
+api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status(pdfNote&&Date.now()-pdfNoteT<30000?pdfNote:'可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v48）')});
 api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
   $('title').textContent=s.title||'未命名'; 
   $('sub').textContent=[s.artist,s.tempo?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');
@@ -627,7 +636,10 @@ function applyView(){const v=$('view').value,g=v==='grid';$('grid').hidden=!g;$(
 $('lay').onchange=e=>{store.set('gp:lay',e.target.value);applyView()};
 $('view').onchange=e=>{store.set('gp:view',e.target.value);applyView()};
 $('zoom').onchange=e=>{store.set('gp:zoom',e.target.value);redraw()};
-$('file').onchange=async e=>{const f=e.target.files[0]; if(!f)return;
+const isPdf=f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf';
+$('file').onchange=async e=>{const all=[...e.target.files]; e.target.value=''; if(!all.length)return;
+  if(all.some(isPdf))return openPdf(all.filter(isPdf));
+  const f=all[0]; $('dlgp').hidden=true; pdfNote='';
   try{api.stop()}catch(x){}
   status('讀取 '+f.name+' …');
   try{ const gb=new Uint8Array(await f.arrayBuffer()); lastGp={bytes:gb.slice(),name:f.name}; curSong=null; $('song').value=''; $('delsong').disabled=true; api.load(gb); if(ready)status('已開啟 '+f.name+'。檔案只在這台裝置上讀取，不會上傳。') }
@@ -660,7 +672,7 @@ async function saveSong(auto){ if(!lastGp||!score){ if(!auto)status('先用「�
     catch(e2){ status('存不進去，可能是裝置空間不足或瀏覽器不允許儲存。',true) } } }
 $('savesong').onclick=()=>saveSong(false);
 let saveTimer=0; const autoSave=()=>{ clearTimeout(saveTimer); saveTimer=setTimeout(()=>saveSong(true),600) };
-$('song').onchange=e=>{ const s=songs.find(x=>x.id===e.target.value); $('delsong').disabled=!s; $('delsong').textContent='刪除'; if(!s)return;
+$('song').onchange=e=>{ const s=songs.find(x=>x.id===e.target.value); $('delsong').disabled=!s; $('delsong').textContent='刪除'; if(e.isTrusted)pdfNote=''; if(!s)return; if(!s.fromPdf)$('dlgp').hidden=true;
   try{api.stop()}catch(x){} curSong=s; lastGp={bytes:new Uint8Array(s.gp.slice(0)),name:s.gpName}; pendingSong=s;
   mp3=null; mp3name=''; M.pause(); $('src').value='synth'; $('src').options[1].disabled=true; $('src').options[1].textContent='MP3（還沒載入）'; ytReady=false; $('src').options[2].disabled=true; $('src').options[2].textContent='YouTube（還沒載入）'; $('ytbox').hidden=true;
   status('開啟 '+s.name+' …'); try{api.load(new Uint8Array(s.gp.slice(0)))}catch(x){status('這首歌的譜檔讀不出來。',true)} };
@@ -701,6 +713,45 @@ $('zip').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f
   status('已匯入 '+ok+' 首到歌單，其中 '+withMp3+' 首有 MP3。'+(failed?failed+' 個檔案讀不出來。':'')+(ok>withMp3?'沒有 MP3 的歌，選歌後再載入 MP3 就會自動補存。':''),failed>0&&ok===0); };
 refreshSongs('');
 if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname==='localhost')navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
+// pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
+let pdfjsLib=null, pdfNote='', pdfNoteT=0, dlUrl='';
+async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=48'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=48'; return pdfjsLib=m }
+function askText(msg,val){ return new Promise(res=>{ const box=$('ask'), inp=$('askin'); $('askmsg').textContent=msg; inp.value=val; box.hidden=false; setTimeout(()=>{inp.focus();inp.select()},50);
+  const done=v=>{ box.hidden=true; $('askok').onclick=$('askno').onclick=inp.onkeydown=null; res(v) };
+  $('askok').onclick=()=>done(inp.value.trim()||val); $('askno').onclick=()=>done(val);
+  inp.onkeydown=ev=>{ if(ev.key==='Enter')done(inp.value.trim()||val); else if(ev.key==='Escape')done(val) } }) }
+function texToGp(tex){ const st=new alphaTab.Settings(), imp=new alphaTab.importer.AlphaTexImporter(); imp.initFromString(tex,st); const sc=imp.readScore(), bad=[];
+  sc.tracks.forEach(t=>t.staves[0].bars.forEach((bar,i)=>{ let d=0; for(const bt of bar.voices[0].beats)if(bt.graceType===0)d+=bt.playbackDuration; if(Math.abs(d-3840)>130)bad.push([t.name,i+1]) }));
+  return {bytes:new alphaTab.exporter.Gp7Exporter().export(sc,st), bad} }
+function showDl(bytes,name){ try{ if(dlUrl)URL.revokeObjectURL(dlUrl); dlUrl=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'})); const a=$('dlgp'); a.href=dlUrl; a.download=name; a.hidden=false }catch(e){} }
+async function openPdf(files){ try{api.stop()}catch(x){}
+  status('讀取 PDF …'); let res;
+  try{ const lib=await loadPdfjs(), data=[]; for(const f of files)data.push({name:f.name,data:new Uint8Array(await f.arrayBuffer())});
+    res=await PdfGp.convertPdfs(lib,data,{progress:t=>status('轉換中：'+t+' …'),
+      askTitle:(guess,names)=>askText('「'+names.join('、')+'」的歌名讀不出來（PDF 裡的標題字型沒有字碼）。請輸入歌名，也可以寫成「歌名 - 歌手」：',guess)}) }
+  catch(x){ const m=x&&x.message||String(x); status(/找不到標題頁/.test(m)?m:'這個 PDF 讀不出來：'+m,true); return }
+  const good=[], failed=[];
+  for(const s of res){ try{ good.push(Object.assign(s,texToGp(s.tex),{gpName:s.title+'.gp'})) }catch(x){ failed.push(s.title) } }
+  if(!good.length){ status('PDF 轉出來的譜讀不進來（'+failed.join('、')+'）。',true); return }
+  // songs already in the list (same name) get the new score and keep their MP3 and alignment; with several songs, all go into the list
+  try{ songs=(await tx('readonly',s=>s.getAll()))||[] }catch(x){}
+  let saved=0, updated=0, openRec=null;
+  for(const g of good){ const old=songs.find(s=>s.gpName===g.gpName);
+    if(!old&&good.length===1)continue;
+    const rec=Object.assign({},old||{},{id:old?old.id:'s'+Date.now()+'-'+saved, name:g.title+(g.artist?' — '+g.artist:''), gp:g.bytes.buffer.slice(g.bytes.byteOffset,g.bytes.byteOffset+g.bytes.byteLength), gpName:g.gpName, fromPdf:true, added:old?old.added:Date.now()});
+    try{ await tx('readwrite',s=>s.put(rec)); old?updated++:saved++; if(g===good[0])openRec=rec }catch(x){} }
+  const first=good[0], tracks=first.parts.map(p=>p.track==='Solo'?'Solo':p.track==='Chords'?'和弦':p.track).join('＋');
+  const checks=good.filter(g=>g.bad.length).map(g=>{ const by={}; for(const [t,n] of g.bad)(by[t]=by[t]||[]).push(n);
+    return g.title+'：'+Object.keys(by).map(t=>t+' 第 '+by[t].slice(0,10).join('、')+(by[t].length>10?' …':'')+' 小節').join('，') });
+  pdfNote='已從 PDF 轉出'+(good.length>1?' '+good.length+' 首（'+good.map(g=>g.title).join('、')+'），':'「'+first.title+'」（'+tracks+'，'+first.bars+' 小節），')+
+    (saved||updated?(saved?'新存入歌單 '+saved+' 首':'')+(saved&&updated?'，':'')+(updated?'更新歌單裡 '+updated+' 首的譜（MP3 和對齊設定保留）':'')+'。':'要留著就按「存入歌單」。')+
+    (checks.length?' 拍子加起來不是 4 拍、要看一下的小節：'+checks.join('；')+'。':'')+(failed.length?' 讀不進來：'+failed.join('、')+'。':'');
+  pdfNoteT=Date.now(); showDl(first.bytes,first.gpName);
+  if(saved||updated){ await refreshSongs(openRec?openRec.id:''); if(openRec){ $('song').value=openRec.id; $('song').onchange({target:$('song')}); $('dlgp').hidden=false; if(ready)status(pdfNote); return } }
+  lastGp={bytes:first.bytes.slice(),name:first.gpName}; curSong=null; $('song').value=''; $('delsong').disabled=true;
+  api.load(first.bytes.slice()); if(ready)status(pdfNote) }
 
 // ---- chord diagrams: shape from the score file if it defines one, otherwise from the chords-db dictionary
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11}, KEYS=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'], BASS=['C','C#','D','D#','E','F','F#','G','G#','A','Bb','B'];
