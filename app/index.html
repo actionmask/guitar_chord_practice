@@ -157,6 +157,36 @@ body.focus .deck>.top{display:none}
 .songpick{flex:0 1 auto;min-width:0;display:flex}
 .songpick select{font-weight:700;font-size:16px;min-width:0;max-width:100%;text-overflow:ellipsis}
 .deck>.top .songpick{flex:1 1 auto}.deck>.top .songpick select{width:100%}
+/* bottom status bar: track mixer button, key/bpm, time, version (hover or tap it to scroll the help text) */
+.sbar{flex:none;display:flex;align-items:center;gap:12px;padding:4px 12px calc(4px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line);font-size:13px;color:var(--mute);min-height:36px;box-sizing:border-box}
+.sbar button{min-height:30px;padding:2px 10px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.sbar .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.sbar .time{flex:none}
+.sbar .marq{flex:1 1 0;min-width:0;overflow:hidden;white-space:nowrap;position:relative;height:20px;cursor:default}
+.sbar .marq .status{position:absolute;left:0;top:0;line-height:20px;margin:0;visibility:hidden;white-space:nowrap}
+.sbar .marq.run .status{visibility:visible;animation:marq var(--dur,12s) linear 1}
+.sbar .marq .status.err{color:#c0392b}
+@keyframes marq{from{transform:translateX(var(--from,100%))}to{transform:translateX(var(--to,-100%))}}
+@media (prefers-reduced-motion:reduce){.sbar .marq.run .status{animation:none;transform:none}}
+.xport #src{max-width:9em}
+.sbar .ver{border:0;background:transparent;color:var(--mute);font-variant-numeric:tabular-nums}
+.sbar .ver:hover{color:var(--accent)}
+.mixer{position:fixed;left:8px;bottom:calc(44px + env(safe-area-inset-bottom,0px));width:min(520px,calc(100vw - 16px));max-height:60vh;overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);z-index:2050;padding:8px 10px;box-sizing:border-box}
+.mixer[hidden]{display:none}
+.mxhead{display:flex;align-items:center;gap:10px;padding:2px 2px 8px;border-bottom:1px solid var(--line)}
+.mxhead b{font-size:15px}.mxnote{flex:1;font-size:12px;color:var(--mute)}
+.mxrow{display:grid;grid-template-columns:minmax(0,1fr) 40px 40px 40px minmax(90px,150px) 36px;align-items:center;gap:6px;padding:6px 2px;border-bottom:1px solid var(--line)}
+.mxrow:last-child{border-bottom:0}
+.mxrow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.mxrow .nm i{font-style:normal;color:var(--mute);margin-right:6px}
+.mxrow button{min-height:34px;padding:0;display:flex;align-items:center;justify-content:center;color:var(--mute)}
+.mxrow button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.mxrow button.mute[aria-pressed="true"]{background:#c0392b;border-color:#c0392b;color:#fff}
+.mxrow input[type=range]{width:100%;accent-color:var(--accent)}
+.mxrow .vv{font-size:12px;color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
+.mxrow.mxmaster{grid-template-columns:minmax(0,1fr) minmax(150px,276px) 36px;border-top:2px solid var(--line);border-bottom:0}
+.mixer.mp3 .mxrow .snd{opacity:.4;pointer-events:none}
+@media (max-width:480px){ .mxrow.mxmaster{grid-template-columns:minmax(0,1fr) minmax(150px,2fr)} .sbar{gap:8px} .sbar .sub{display:none} .mxrow{grid-template-columns:minmax(0,1fr) 36px 36px 36px minmax(70px,1fr)} .mxrow .vv{display:none} }
 .status{color:var(--mute);font-size:13px;margin:0}
 .status.err{color:#c0392b}
 .sheetwrap{flex:1;min-height:0;overflow:auto;padding-inline:16px;padding-block:12px;scroll-behavior:auto;overflow-anchor:none;overscroll-behavior:contain}
@@ -184,16 +214,15 @@ body.roll .sheet{width:max-content;min-width:100%}
     <div class="top" id="topline">
     <h1 id="title" class="vh">吉他譜練習播放器</h1>
     <span class="songpick"><select id="song" aria-label="歌單"><option value="">歌單是空的</option></select></span>
-    <span class="sub" id="sub">選一個 Guitar Pro 檔，邊看譜邊聽</span>
   </div>
     <label><span class="lbl">速度 </span><select id="speed" aria-label="速度"><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.8">80%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option></select></label>
+    <label><span class="lbl">聲音 </span><select id="src" aria-label="聲音"><option value="synth">合成</option><option value="mp3" disabled>MP3（還沒載入）</option><option value="yt" disabled>YouTube（還沒載入）</option></select></label>
     <button id="loop" aria-pressed="false">循環</button>
     <button id="chordpanel" aria-pressed="true" title="和弦面板" aria-label="和弦面板">和弦面板</button>
-    <span class="fulltime"><button id="full" aria-pressed="false" title="全螢幕" aria-label="全螢幕">全螢幕</button><span class="time" id="time">0:00 / 0:00</span></span>
-    <button id="setbtn" aria-expanded="false" aria-controls="drawer" title="設定" aria-label="設定"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg><span class="lbl">設定</span></button>
+    <span class="fulltime"><button id="full" aria-pressed="false" title="全螢幕" aria-label="全螢幕">全螢幕</button></span>
+    <button id="setbtn" aria-expanded="false" aria-controls="drawer" title="設定" aria-label="設定"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span class="lbl">設定</span></button>
   </div>
   <div class="chips" id="secs" aria-label="選一段來循環"></div>
-  <p class="status" id="status">載入中…</p>
 </header>
 <div class="ask" id="ask" hidden><div role="dialog" aria-labelledby="askmsg"><p id="askmsg"></p><input id="askin" type="text"><p class="askbtn"><button id="askno">用這個名字</button> <button id="askok" class="pri">確定</button></p></div></div>
 <div class="scrim" id="scrim" hidden></div>
@@ -201,26 +230,20 @@ body.roll .sheet{width:max-content;min-width:100%}
   <div class="dhead"><b>設定</b><button id="dclose" aria-label="關閉設定">關閉</button></div>
   <section><h3>歌曲</h3>
     <div class="row"><label class="filebtn">開啟譜檔<input type="file" id="file" multiple accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml,.mxl,.cap,.pdf,application/pdf,application/octet-stream,*/*"></label> <button id="savesong">存入歌單</button> <button id="delsong" disabled>刪除</button> <a class="filebtn" id="dlgp" hidden download>下載 .gp</a></div>
+    <div class="row"><label class="filebtn">匯入歌曲包 (zip)<input type="file" id="zip" accept=".zip,application/zip"></label></div>
   </section>
   <section><h3>練習</h3>
-    <div class="row"><label>第 <input type="number" id="la" min="1" value="1" style="width:60px"> 到 <input type="number" id="lb" min="1" value="1" style="width:60px"> 小節</label></div>
+    <div class="row"><label>第 <input type="number" id="la" min="1" value="1" style="width:60px"> 到 <input type="number" id="lb" min="1" value="1" style="width:60px"> 小節</label> <button id="loop2" aria-pressed="false">循環</button></div>
     <div class="row"><button id="metro" aria-pressed="false">節拍器</button> <button id="countin" aria-pressed="false">預備拍</button></div>
   </section>
   <section><h3>顯示</h3>
-    <div class="row"><label>顯示 <select id="view"><option value="tab">只看六線譜</option><option value="jianpu">六線譜＋簡譜</option></select></label> <label>排版 <select id="lay"><option value="page">整頁換行</option><option value="roll">單行連續滾動</option></select></label></div>
-  </section>
-  <section><h3>音軌與聲音</h3>
-    <div class="row"><label>音軌 <select id="track"></select></label> <button id="solo" aria-pressed="false">只聽這一軌</button></div>
-    <div class="row"><label>聲音 <select id="src" style="max-width:11em" aria-label="聲音"><option value="synth">合成</option><option value="mp3" disabled>MP3（還沒載入）</option><option value="yt" disabled>YouTube（還沒載入）</option></select></label></div>
+    <div class="row"><label>顯示 <select id="view"><option value="tab">只看六線譜</option><option value="jianpu">六線譜＋簡譜</option><option value="grid">和弦方格</option></select></label> <label>排版 <select id="lay"><option value="page">整頁換行</option><option value="roll">單行連續滾動</option></select></label></div>
   </section>
   <details class="more" id="more">
     <summary>進階</summary>
     <div class="row">
       <label>大小 <select id="zoom"><option value="0.7">小</option><option value="0.9" selected>中</option><option value="1.15">大</option></select></label>
       <label>指型 <select id="voicing"><option value="file">常見按法</option><option value="barre">封閉和弦</option><option value="power">強力和弦</option><option value="off">不顯示</option></select></label>
-    </div>
-    <div class="row">
-      <label class="filebtn">匯入歌曲包 (zip)<input type="file" id="zip" accept=".zip,application/zip"></label>
     </div>
     <h3 class="sub3">配上音樂（MP3／YouTube）</h3>
     <div class="row">
@@ -253,23 +276,34 @@ body.roll .sheet{width:max-content;min-width:100%}
 </aside>
 <div class="ytbox" id="ytbox" hidden><button id="ytmin" title="縮小或放大影片">–</button><div class="ytframe"></div></div>
 <main class="sheetwrap" id="wrap"><div class="grid" id="grid" hidden></div><div id="sheetbox"><div class="sheet" id="at"></div></div></main>
+<footer class="sbar" id="sbar">
+  <button id="mixbtn" aria-expanded="false" aria-controls="mixer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"></path></svg>音軌/譜面</button>
+  <span class="sub" id="sub">選一個 Guitar Pro 檔，邊看譜邊聽</span>
+  <span class="time" id="time">0:00 / 0:00</span>
+  <div class="marq" id="marq" aria-live="polite"><span class="status" id="status">載入中…</span></div>
+  <button class="ver" id="ver" title="說明">v66</button>
+</footer>
+<div class="mixer" id="mixer" hidden role="dialog" aria-label="音軌/譜面">
+  <div class="mxhead"><b>音軌/譜面</b><span class="mxnote" id="mxnote"></span><button id="mxclose" aria-label="關閉音軌">關閉</button></div>
+  <div class="mxrows" id="mxrows"></div>
+  <div hidden><select id="track"></select><button id="solo" aria-pressed="false">只聽這一軌</button></div>
+</div>
 
-<script src="alphaTab.min.js?v=56"></script>
-<script src="soundfont.js?v=56"></script>
-<script src="chords.js?v=56"></script>
-<script src="pdfgp.js?v=56"></script>
+<script src="alphaTab.min.js?v=66"></script>
+<script src="soundfont.js?v=66"></script>
+<script src="chords.js?v=66"></script>
+<script src="pdfgp.js?v=66"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
-const status=(t,err)=>{$('status').textContent=t;$('status').classList.toggle('err',!!err)};
+const status=(t,err)=>{$('status').textContent=t;$('status').classList.toggle('err',!!err); if(err)setTimeout(()=>{try{runMarq()}catch(e){}},0)};
 if(!window.alphaTab){status('播放元件沒有載入成功，請重新整理頁面。',true);return}
 const base=new URL('.',location.href).href;
 // 換音色：把 .sf2 或 .sf3 檔放在這個資料夾，檔名填在這裡（例如 'GeneralUser.sf2'）。留空就用內建的 soundfont.js。
 const SOUNDFONT_FILE='';
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 $('lay').value=store.get('gp:lay','page'); if(!$('lay').value)$('lay').value='page';
-// 和弦方格 is no longer in the 顯示 menu: it is switched on and off by the 和弦 panel button
-let gridOn=false; const VIEW={get value(){return gridOn?'grid':$('view').value}, set value(v){ if(v==='grid')gridOn=true; else{ gridOn=false; $('view').value=v } }};
+const VIEW={get value(){return $('view').value}, set value(v){ $('view').value=v }};
 function isRoll(){return $('lay').value==='roll'&&VIEW.value!=='grid'}
 document.body.classList.toggle('roll',isRoll());
 VIEW.value=store.get('gp:view','tab'); if(!VIEW.value)VIEW.value='tab'; $('zoom').value=store.get('gp:zoom','0.9'); if(!$('zoom').value)$('zoom').value='0.9';
@@ -288,7 +322,7 @@ const api=new alphaTab.AlphaTabApi($('at'),{
   display:{scale:+$('zoom').value,staveProfile:VIEW.value==='jianpu'?alphaTab.StaveProfile.Default:alphaTab.StaveProfile.Tab,layoutMode:isRoll()?alphaTab.LayoutMode.Horizontal:alphaTab.LayoutMode.Page},
   player:{scrollMode:alphaTab.ScrollMode.Off,scrollSpeed:0,nativeBrowserSmoothScroll:false,enablePlayer:true,outputMode:alphaTab.PlayerOutputMode.WebAudioScriptProcessor,...(SOUNDFONT_FILE?{soundFont:base+SOUNDFONT_FILE}:{}),scrollElement:$('wrap'),enableCursor:true,enableUserInteraction:true,scrollOffsetY:-20}
 });
-let ownClock=false, score=null, track=0, ready=false, playing=false, wl=null;
+let ownClock=false, score=null, track=0, ready=false, playing=false, wl=null; let vis=[0], mix=[];   // tracks shown in the score; per-track mixer settings
 function wake(on){try{ if(on){ if(!wl&&navigator.wakeLock)navigator.wakeLock.request('screen').then(l=>{wl=l;l.addEventListener('release',()=>{if(wl===l)wl=null})}).catch(()=>{}) } else if(wl){const l=wl;wl=null;l.release().catch(()=>{})} }catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&playing)wake(true)});
 const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
@@ -296,17 +330,21 @@ const fmt=ms=>{const s=Math.max(0,Math.floor(ms/1000));return Math.floor(s/60)+'
 api.error.on(e=>{status('這個檔案讀不出來。支援 Guitar Pro（.gp3 .gp4 .gp5 .gpx .gp）和 MusicXML。',true)});
 api.soundFontLoad.on(e=>{ if(!ready&&e.total)status('載入吉他音色 '+Math.floor(e.loaded/e.total*100)+'%') });
 let needReload=false;
-api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){api.masterVolume=score.tracks.length>1?0.75:1; api.changeTrackVolume(score.tracks,1); setSolo($('solo').getAttribute('aria-pressed')==='true')} }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status(pdfNote&&Date.now()-pdfNoteT<30000?pdfNote:'可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。（網頁 v56）')});
-api.scoreLoaded.on(s=>{ score=s; track=0; staffFlags();
-  $('title').textContent=s.title||'未命名'; try{songHead()}catch(e){} 
-  $('sub').textContent=[s.artist,s.tempo?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');
+api.playerReady.on(()=>{ if(needReload){needReload=false; try{api.loadMidiForScore()}catch(e){} attach(); return} ready=true;$('play').disabled=$('stop').disabled=false; attach(); try{ if(score){applyMixer()} applyMaster(); }catch(e){} /* without this, tracks after the first stay silent */ if(pending){const q=pending;pending=null;setTimeout(()=>{try{handler.seekTo(q.v);const o=out();if(o&&o.updatePosition)o.updatePosition(V);if(q.play)api.play()}catch(e){}},50)}status(pdfNote&&Date.now()-pdfNoteT<30000?pdfNote:'可以播放。在譜上點一下可以從那裡開始，開「循環」會重複你填的小節範圍，點段落名稱可以直接選那一段。')});
+// An empty bar from Guitar Pro holds one quarter-note rest; the cursor then ran to the next bar after one beat and waited there.
+// Let that rest last the whole bar (playback timing only, the drawing stays the same) so the cursor glides through the bar like in Guitar Pro.
+function stretchEmptyBars(s){ try{ for(const t of s.tracks)for(const st of t.staves)st.bars.forEach((b,i)=>{ const len=s.masterBars[i].calculateDuration();
+  for(const v of b.voices)if(v.beats.length===1){ const x=v.beats[0]; if((x.isEmpty||x.isRest)&&x.playbackStart===0&&x.playbackDuration<len)x.playbackDuration=len } }) }catch(e){} }
+api.scoreLoaded.on(s=>{ score=s; track=0; stretchEmptyBars(s); staffFlags();
+  $('title').textContent=s.title||'未命名'; try{headGone=false;songHead()}catch(e){} 
+  $('sub').textContent=[s.artist,s.tempo&&!/bpm/i.test(s.artist||'')?s.tempo+' bpm':'',s.masterBars.length+' 小節'].filter(Boolean).join(' · ');
   const sel=$('track'); sel.innerHTML='';
   s.tracks.forEach((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+(t.name||'音軌');sel.appendChild(o)});
   if(s.tracks.length>1){const o=document.createElement('option');o.value='all';o.textContent='全部一起顯示';sel.appendChild(o)}
   // open on the first guitar-like (tablature) track rather than vocals or drums
   const g=s.tracks.findIndex(t=>t.staves.some(st=>st.showTablature&&st.tuning&&st.tuning.length>=6&&!st.isPercussion));
-  if(g>0){track=g;sel.value=g;api.renderTracks([s.tracks[g]])}
-  buildMap(); setSolo(false);
+  initMix(s); vis=[Math.max(0,g)]; if(g>0){track=g;sel.value=g;api.renderTracks([s.tracks[g]])}
+  buildMap(); applyMixer(); buildMixer();
   SP=null; try{spUI()}catch(e){} $('la').value=1; $('lb').value=s.masterBars.length; $('loop').setAttribute('aria-pressed','false'); applyLoop(); $('bpm').value=s.tempo||120; $('syncbar').max=$('startbar').max=s.masterBars.length; $('startbar').value=firstNoteBar(s); $('delay').value='0.00'; $('syncbar').value=$('startbar').value; readStart();
   if(pendingSong){ const ps=pendingSong; pendingSong=null;
     if(ps.ytId){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|yt:'+ps.ytId,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); const sel=ps.src==='yt'||!ps.mp3; setTimeout(()=>{ if(sel)loadingSong=true; loadYT(ps.ytId,sel) },0) }
@@ -466,8 +504,9 @@ function readStart(){ if(!score)return; const tk=score.masterBars[startN()-1].st
   OFF=-(+$('delay').value||0)-secOf(tk)*ratioNow(); }
 function showStart(){ if(!score)return; if(document.activeElement!==$('delay'))$('delay').value=(0-a2t(score.masterBars[startN()-1].start)).toFixed(2); }
 const beatSec=()=>60/(+$('bpm').value||score.tempo||120);
-// playback always starts at least one bar of clicks before the audio
-function calcPre(){ const o=a2t(0), bar=a2t(score.masterBars[0].calculateDuration())-o; PRE=-Math.min(o,-bar)*1000; }
+// bar 1 before the audio (Guitar Pro style, e.g. an empty first bar): the cursor starts at once and the audio comes in on time;
+// bar 1 at or after the audio start: count one bar of clicks first
+function calcPre(){ const o=a2t(0), bar=a2t(score.masterBars[0].calculateDuration())-o; PRE=(o<0?-o:bar)*1000; }
 function syncPoints(){ const mbs=score.masterBars, ms=i=>PRE+a2t(mbs[i].start)*1000;
   if(SP){ const pts=[{barIndex:0,barOccurence:0,barPosition:0,millisecondOffset:Math.max(0,ms(0))}];
     for(const p of SP)if(p.bar>1||p.pos>0)pts.push({barIndex:p.bar-1,barOccurence:0,barPosition:p.pos,millisecondOffset:Math.max(0,PRE+p.t*1000)}); return pts }
@@ -513,7 +552,7 @@ function applyAudio(){ if(!score)return; const useMp3=mp3On();
   if(useMp3){ readStart(); calcPre(); score.applyFlatSyncPoints(syncPoints()); api.settings.player.playerMode=alphaTab.PlayerMode.EnabledExternalMedia;
     store.set(key(),JSON.stringify(syncRec())); }
   else { score.applyFlatSyncPoints([]); api.settings.player.playerMode=alphaTab.PlayerMode.EnabledSynthesizer; }
-  $('countin').disabled=$('solo').disabled=!!useMp3;
+  $('countin').disabled=$('solo').disabled=!!useMp3; try{buildMixer();applyMaster()}catch(e){}
   ready=false; $('play').disabled=$('stop').disabled=true;
   needReload=!!useMp3; api.updateSettings(); attach(); api.loadMidiForScore(); attach(); applyLoop();
   if(!useMp3&&window.__sf)setTimeout(()=>{ if(!ready)try{api.loadSoundFont(window.__sf.slice())}catch(e){} },1200); }
@@ -558,8 +597,7 @@ function doSync(){ if(!score||!mp3On()){status('先載入 MP3 或 YouTube 影片
   const tk=score.masterBars[n-1].start; if(SP)shiftSP(t-a2t(tk),tk); /* fine alignment: move this bar and everything after it */ else OFF=t-secOf(tk)*ratioNow(); showStart(); resync();
   status('已對齊：第 '+n+' 小節的第一拍在音檔的 '+t.toFixed(2)+' 秒。'); }
 $('sync').onclick=doSync;
-function setSolo(on){ $('solo').setAttribute('aria-pressed',on); if(!score)return;
-  try{ api.changeTrackSolo(score.tracks,false); if(on)api.changeTrackSolo([score.tracks[track]],true) }catch(e){} }
+function setSolo(on){ $('solo').setAttribute('aria-pressed',on); applyMixer() }
 const toggle=(id,fn)=>{$(id).onclick=()=>{const on=$(id).getAttribute('aria-pressed')!=='true';$(id).setAttribute('aria-pressed',on);fn(on)}};
 toggle('loop',()=>applyLoop());
 $('la').onchange=$('lb').onchange=()=>applyLoop();
@@ -661,7 +699,7 @@ $('wrap').addEventListener('touchmove',()=>{ if(isRoll())rk.hold=performance.now
 function staffFlags(){ if(!score)return; const j=VIEW.value==='jianpu';
   for(const t of score.tracks)for(const st of t.staves){ if(st.isPercussion)continue; st.showNumbered=j; if(j){st.showTablature=true;st.showStandardNotation=false;st.showSlash=false} } }
 function redraw(){ api.settings.display.scale=+$('zoom').value; api.settings.display.layoutMode=isRoll()?alphaTab.LayoutMode.Horizontal:alphaTab.LayoutMode.Page; document.body.classList.toggle('roll',isRoll()); rk.shown=-1; $('wrap').scrollLeft=0; lineY=null; api.settings.display.staveProfile=VIEW.value==='jianpu'?alphaTab.StaveProfile.Default:alphaTab.StaveProfile.Tab;
-  staffFlags(); api.updateSettings(); if(score){ const sel=$('track').value; api.renderTracks(sel==='all'?score.tracks:[score.tracks[track]]) } else api.render(); }
+  staffFlags(); api.updateSettings(); if(score){ api.renderTracks(vis.map(i=>score.tracks[i])) } else api.render(); }
 let lastStave=VIEW.value==='jianpu'?'jianpu':'tab', lastLay=isRoll();
 function applyView(){const v=VIEW.value,g=v==='grid';$('grid').hidden=!g;$('sheetbox').classList.toggle('sheethide',g);
   // while the grid is showing, alphaTab must not scroll the pane after its own (hidden) cursor: that fought the grid's scrolling and made it jump every bar
@@ -669,7 +707,7 @@ function applyView(){const v=VIEW.value,g=v==='grid';$('grid').hidden=!g;$('shee
   $('lay').disabled=g; document.body.classList.toggle('roll',isRoll());
   if(g){gridFollow(curBar,true)}else if(v!==lastStave||isRoll()!==lastLay){lastStave=v;lastLay=isRoll();redraw()}}
 $('lay').onchange=e=>{store.set('gp:lay',e.target.value);applyView()};
-$('view').onchange=e=>{gridOn=false;store.set('gp:view',e.target.value);applyView()};
+$('view').onchange=e=>{store.set('gp:view',e.target.value);applyView();applyChordPanel();setTimeout(()=>{try{api.render()}catch(x){}},200)};
 $('zoom').onchange=e=>{store.set('gp:zoom',e.target.value);redraw()};
 const isPdf=f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf';
 $('file').onchange=async e=>{const all=[...e.target.files]; e.target.value=''; if(!all.length)return;
@@ -702,7 +740,54 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('drawer').hidde
 const mqNarrow=window.matchMedia('(max-width:760px)');
 function placeTitle(){ const t=$('topline'); if(mqNarrow.matches){ if(t.parentNode!==document.querySelector('.deck'))document.querySelector('.deck').prepend(t) } else if(t.parentNode!==$('xport'))$('xport').insertBefore(t,$('speed').closest('label')) }
 try{ mqNarrow.addEventListener('change',placeTitle) }catch(e){ try{mqNarrow.addListener(placeTitle)}catch(x){} } placeTitle();
-function loopLabel(){ try{ const on=loopOn(); $('loop').textContent=on?'循環 '+$('la').value+'–'+$('lb').value:'循環' }catch(e){} }
+function loopLabel(){ try{ const on=loopOn(); $('loop').textContent=on?'循環 '+$('la').value+'–'+$('lb').value:'循環'; $('loop2').setAttribute('aria-pressed',on); $('loop2').textContent=on?'循環中（再按一次停止）':'循環' }catch(e){} }
+$('loop2').onclick=()=>$('loop').click();   // same switch as 循環 in the play bar
+// 預備拍: alphaTab holds the cursor still while it counts in, so run the beat lamps from our own clock until the music starts
+function tempoAt(bar){ let t=score.tempo||120; for(let j=0;j<=bar;j++){ const m=score.masterBars[j], a=m.tempoAutomations||(m.tempoAutomation?[m.tempoAutomation]:[]); for(const x of a)if(x&&x.value)t=x.value } return t }
+api.playerStateChanged.on(e=>{ if(e.state!==alphaTab.synth.PlayerState.Playing||ownClock||!score||$('countin').getAttribute('aria-pressed')!=='true')return;
+  const t0=api.tickPosition, bar=barAt(t0), mb=score.masterBars[bar], ms=mb.calculateDuration()/960*60000/tempoAt(bar)/(api.playbackSpeed||1), s0=performance.now();
+  const ls=$('lamps').children, step=()=>{ if(!playing||Math.abs(api.tickPosition-t0)>20)return; const el=performance.now()-s0; if(el>ms*1.3)return;
+    const k=Math.min(lampN-1,Math.floor(el/ms*lampN)); if(k!==lastLamp){ lastLamp=k; for(let j=0;j<ls.length;j++)ls[j].classList.toggle('on',j===k) } requestAnimationFrame(step) };
+  lastLamp=-1; requestAnimationFrame(step) });
+// ---- track mixer (opened from 音軌 in the status bar): which tracks show in the score, and how each one sounds
+const IC={eye:'<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle>',
+  mute:'<path d="M11 5L6 9H2v6h4l5 4z"></path><path d="M23 9l-6 6M17 9l6 6"></path>',
+  solo:'<path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"></path>'};
+const ic=n=>'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">'+IC[n]+'</svg>';
+function initMix(s){ mix=s.tracks.map(()=>({mute:false,solo:false,vol:1})); }
+function applyMixer(){ if(!score||!mix.length)return; try{ score.tracks.forEach((t,i)=>{ const m=mix[i]||{vol:1}; api.changeTrackVolume([t],m.vol); api.changeTrackMute([t],!!m.mute); api.changeTrackSolo([t],!!m.solo) }) }catch(e){} }
+function showTracks(list){ if(!score)return; vis=list.slice().sort((a,b)=>a-b); track=vis[0]; $('track').value=vis.length===score.tracks.length&&vis.length>1?'all':String(track);
+  api.renderTracks(vis.map(i=>score.tracks[i])); buildMap(); buildMixer() }
+function buildMixer(){ const box=$('mxrows'); if(!score){box.innerHTML='';return} box.innerHTML='';
+  $('mixer').classList.toggle('mp3',mp3On()); $('mxnote').textContent=mp3On()?'現在用錄音播放，音量和靜音只對「合成」有用':'眼睛：顯示在譜上　喇叭：靜音　耳機：只聽這一軌';
+  score.tracks.forEach((t,i)=>{ const m=mix[i], row=document.createElement('div'); row.className='mxrow';
+    const nm=document.createElement('span'); nm.className='nm'; nm.innerHTML='<i>'+(i+1)+'</i>'; nm.appendChild(document.createTextNode(t.name||'音軌')); nm.title=t.name||'';
+    const b=(cls,icon,on,label,fn)=>{ const x=document.createElement('button'); x.className=cls; x.innerHTML=ic(icon); x.setAttribute('aria-pressed',on); x.setAttribute('aria-label',label+'：'+(t.name||'音軌'+(i+1))); x.title=label; x.onclick=fn; return x };
+    const eye=b('eye','eye',vis.includes(i),'顯示在譜上',()=>{ let v=vis.includes(i)?vis.filter(x=>x!==i):vis.concat(i); if(!v.length)v=[i]; showTracks(v) });
+    const mu=b('mute snd','mute',m.mute,'靜音',()=>{ m.mute=!m.mute; applyMixer(); buildMixer() });
+    const so=b('solo snd','solo',m.solo,'只聽這一軌',()=>{ const on=!m.solo; mix.forEach(x=>x.solo=false); m.solo=on; applyMixer(); buildMixer() });   // only one track at a time; use 靜音 to pick several
+    const r=document.createElement('input'); r.type='range'; r.min=0; r.max=150; r.step=5; r.value=Math.round(m.vol*100); r.className='snd'; r.setAttribute('aria-label','音量：'+(t.name||'音軌'+(i+1)));
+    const vv=document.createElement('span'); vv.className='vv'; vv.textContent=r.value+'%';
+    r.oninput=()=>{ m.vol=r.value/100; vv.textContent=r.value+'%'; try{api.changeTrackVolume([t],m.vol)}catch(e){} };
+    row.append(nm,eye,mu,so,r,vv); box.appendChild(row) }); box.appendChild(masterRow()) }
+// 總音量: one level for whatever is playing (合成, MP3 or YouTube), remembered on this device
+let master=(()=>{ const v=parseFloat(store.get('gp:master','1')); return isFinite(v)?Math.max(0,Math.min(1,v)):1 })();
+function applyMaster(){ const base=score&&score.tracks.length>1&&!mp3On()?0.75:1; try{api.masterVolume=base*master}catch(e){} try{ if(mp3On())M.setVol(master) }catch(e){} }
+function masterRow(){ const row=document.createElement('div'); row.className='mxrow mxmaster';
+  const nm=document.createElement('span'); nm.className='nm'; nm.innerHTML='<b>總音量</b>'; nm.title='合成、MP3、YouTube 都會跟著變';
+  const r=document.createElement('input'); r.type='range'; r.min=0; r.max=100; r.step=1; r.value=Math.round(master*100); r.setAttribute('aria-label','總音量');
+  const vv=document.createElement('span'); vv.className='vv'; vv.textContent=r.value+'%';
+  r.oninput=()=>{ master=r.value/100; vv.textContent=r.value+'%'; applyMaster(); store.set('gp:master',String(master)) };
+  row.append(nm,r,vv); return row }
+function setMixer(on){ $('mixer').hidden=!on; $('mixbtn').setAttribute('aria-expanded',on); if(on)buildMixer() }
+$('mixbtn').onclick=e=>{ e.stopPropagation(); setMixer($('mixer').hidden) }; $('mxclose').onclick=()=>setMixer(false);
+document.addEventListener('pointerdown',e=>{ if(!$('mixer').hidden&&!$('mixer').contains(e.target)&&!$('mixbtn').contains(e.target))setMixer(false) });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('mixer').hidden)setMixer(false) });
+// ---- help text in the status bar: hidden behind the version label; hover or tap it (or the empty bar) and it scrolls past once
+function runMarq(){ const m=$('marq'), t=$('status'); if(!t.textContent)return; m.classList.remove('run'); void m.offsetWidth;
+  const w=m.clientWidth, tw=t.scrollWidth; m.style.setProperty('--from',w+'px'); m.style.setProperty('--to',-tw+'px'); m.style.setProperty('--dur',Math.max(4,(w+tw)/80)+'s'); m.classList.add('run') }
+$('status').addEventListener('animationend',()=>$('marq').classList.remove('run'));
+$('ver').onclick=runMarq; $('ver').addEventListener('mouseenter',runMarq); $('marq').addEventListener('mouseenter',runMarq); $('marq').onclick=runMarq;
 document.addEventListener('keydown',e=>{const tag=e.target.tagName;if(tag==='INPUT'||tag==='SELECT')return;if(e.code==='Space'&&ready){e.preventDefault();api.playPause()}else if(e.key==='s'||e.key==='S'){doSync()}});
 if(!SOUNDFONT_FILE)try{const s=atob(window.SF2_B64||''),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);window.__sf=u;let sent=0,done=false;const t0=Date.now();api.soundFontLoaded.on(()=>{done=true});const go=()=>{if(done)return;try{if(!sent&&api.player&&(api.player.isReady||Date.now()-t0>4000)){api.loadSoundFont(u.slice());sent=Date.now()}else if(sent&&Date.now()-sent>12000)sent=0}catch(e){}setTimeout(go,250)};go()}catch(e){status('吉他音色沒有載入成功，請重新整理頁面。',true)}
 
@@ -729,7 +814,8 @@ async function refreshSongs(sel){ try{ songs=(await tx('readonly',s=>s.getAll())
   const o0=document.createElement('option'); o0.value=''; o0.textContent=songs.length?'選一首歌（共 '+songs.length+' 首）':'歌單是空的'; el.appendChild(o0);
   for(const s of songs){const o=document.createElement('option'); o.value=s.id; o.textContent=s.name+(s.mp3?' ♪':''); el.appendChild(o)}
   el.value=sel||''; $('delsong').disabled=!el.value; songHead() }
-function songHead(){ const o=$('song').options[0]; if(!o||o.value!=='')return; const t=score&&score.title; o.textContent=t?t+'（還沒存入歌單）':songs.length?'選一首歌（共 '+songs.length+' 首）':'歌單是空的' }
+let headGone=false;   // the open song was just deleted from the list: don't keep showing its name
+function songHead(){ const o=$('song').options[0]; if(!o||o.value!=='')return; const t=!headGone&&score&&score.title; o.textContent=songs.length?'選一首歌（共 '+songs.length+' 首）':t||'歌單是空的' }
 async function saveSong(auto){ if(!lastGp||!score){ if(!auto)status('先用「開啟譜檔」開一首歌，再存入歌單。',true); return }
   if(auto&&!curSong)return;   // automatic saves only update a song that is already in the list
   const useMp3=!!mp3, base={id:(curSong&&curSong.gpName===lastGp.name)?curSong.id:'s'+Date.now(), name:(score.title||lastGp.name.replace(/\.[^.]+$/,''))+(score.artist?' — '+score.artist:''),
@@ -750,7 +836,7 @@ $('song').onchange=e=>{ const s=songs.find(x=>x.id===e.target.value); $('delsong
   status('開啟 '+s.name+' …'); try{api.load(new Uint8Array(s.gp.slice(0)))}catch(x){status('這首歌的譜檔讀不出來。',true)} };
 $('delsong').onclick=async()=>{ const id=$('song').value; if(!id)return; const b=$('delsong');
   if(b.textContent!=='確定刪除？'){ b.textContent='確定刪除？'; setTimeout(()=>{b.textContent='刪除'},4000); return }
-  b.textContent='刪除'; try{ await tx('readwrite',s=>s.delete(id)); if(curSong&&curSong.id===id)curSong=null; await refreshSongs(''); status('已從歌單刪除。目前開著的譜不受影響。') }catch(e){ status('刪除失敗。',true) } };
+  b.textContent='刪除'; try{ await tx('readwrite',s=>s.delete(id)); if(curSong&&curSong.id===id){curSong=null;headGone=true} await refreshSongs(''); status('已從歌單刪除。目前開著的譜不受影響。') }catch(e){ status('刪除失敗。',true) } };
 
 // ---- import a zip of songs: each score file becomes a song; an audio file with the same name becomes its MP3
 async function unzip(buf){ const v=new DataView(buf), u=new Uint8Array(buf); let e=-1;
@@ -789,7 +875,7 @@ if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname
 // ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
 // pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
 let pdfjsLib=null, pdfNote='', pdfNoteT=0, dlUrl='';
-async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=56'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=56'; return pdfjsLib=m }
+async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=66'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=66'; return pdfjsLib=m }
 function askText(msg,val){ return new Promise(res=>{ const box=$('ask'), inp=$('askin'); $('askmsg').textContent=msg; inp.value=val; box.hidden=false; setTimeout(()=>{inp.focus();inp.select()},50);
   const done=v=>{ box.hidden=true; $('askok').onclick=$('askno').onclick=inp.onkeydown=null; res(v) };
   $('askok').onclick=()=>done(inp.value.trim()||val); $('askno').onclick=()=>done(val);
@@ -864,9 +950,10 @@ $('voicing').onchange=e=>{ store.set('gp:voicing',e.target.value); shownIdx=-2; 
 // chord panel switch: remembered separately for portrait and landscape; shown until switched off. (Sideways the page looks the same as upright; 全螢幕 hides the settings.)
 const mqLand=window.matchMedia('(orientation:landscape) and (max-height:520px)'), mqOri=window.matchMedia('(orientation:landscape)');
 const cpKey=()=>'gp:chordpanel:'+(mqOri.matches?'l':'p');
-function applyChordPanel(){ const pref=store.get(cpKey(),''), on=pref?pref==='on':true;
+// chord panel = 和弦方格: the panel is shown exactly when 顯示 is 和弦方格, and the 和弦 button switches between that and 六線譜＋簡譜
+function applyChordPanel(){ const on=VIEW.value==='grid';
   document.body.classList.toggle('nochord',!on); $('chordpanel').setAttribute('aria-pressed',on); }
-$('chordpanel').onclick=()=>{ const on=document.body.classList.contains('nochord'); store.set(cpKey(),on?'on':'off'); applyChordPanel(); { const v=on?'grid':'jianpu'; if(VIEW.value!==v){ VIEW.value=v; store.set('gp:view',v); applyView() } } setTimeout(()=>{try{api.render()}catch(e){}},200) };
+$('chordpanel').onclick=()=>{ const v=VIEW.value==='grid'?'jianpu':'grid'; VIEW.value=v; store.set('gp:view',v); applyView(); applyChordPanel(); setTimeout(()=>{try{api.render()}catch(e){}},200) };
 for(const m of [mqLand,mqOri]){ try{ m.addEventListener('change',applyChordPanel) }catch(e){ try{m.addListener(applyChordPanel)}catch(x){} } }
 applyChordPanel();
 // full screen: hide the settings so the score fills the page, and ask the browser for real fullscreen where it is allowed
