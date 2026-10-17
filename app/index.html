@@ -281,7 +281,7 @@ body.roll .sheet{width:max-content;min-width:100%}
   <span class="sub" id="sub">選一個 Guitar Pro 檔，邊看譜邊聽</span>
   <span class="time" id="time">0:00 / 0:00</span>
   <div class="marq" id="marq" aria-live="polite"><span class="status" id="status">載入中…</span></div>
-  <button class="ver" id="ver" title="說明">v66</button>
+  <button class="ver" id="ver" title="說明">v68</button>
 </footer>
 <div class="mixer" id="mixer" hidden role="dialog" aria-label="音軌/譜面">
   <div class="mxhead"><b>音軌/譜面</b><span class="mxnote" id="mxnote"></span><button id="mxclose" aria-label="關閉音軌">關閉</button></div>
@@ -289,13 +289,30 @@ body.roll .sheet{width:max-content;min-width:100%}
   <div hidden><select id="track"></select><button id="solo" aria-pressed="false">只聽這一軌</button></div>
 </div>
 
-<script src="alphaTab.min.js?v=66"></script>
-<script src="soundfont.js?v=66"></script>
-<script src="chords.js?v=66"></script>
-<script src="pdfgp.js?v=66"></script>
+<script src="alphaTab.min.js?v=68"></script>
+<script src="soundfont.js?v=68"></script>
+<script src="chords.js?v=68"></script>
+<script src="pdfgp.js?v=68"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
+// 合成 louder: the synth came out about 10 dB under a mastered MP3 (track volumes, dynamics, headroom).
+// Its output goes through a slow automatic gain (aims for MP3-like loudness) and a limiter so peaks never clip.
+let synthOut=null;   // 總音量 for 合成 sits after the automatic gain, so the two don't fight
+(function(){ const orig=AudioNode.prototype.connect;
+  function chain(ctx){ const g=ctx.createGain(), lim=ctx.createDynamicsCompressor(), an=ctx.createAnalyser(), out=ctx.createGain();
+    g.gain.value=2; lim.threshold.value=-6; lim.knee.value=3; lim.ratio.value=20; lim.attack.value=0.002; lim.release.value=0.15;
+    an.fftSize=2048; orig.call(g,lim); orig.call(lim,out); orig.call(out,ctx.destination); orig.call(g,an);
+    try{ out.gain.value=master }catch(e){} synthOut=out;
+    const buf=new Float32Array(an.fftSize); let acc=0,n=0;
+    setInterval(()=>{ if(ctx.state!=='running')return; an.getFloatTimeDomainData(buf); let s=0; for(let i=0;i<buf.length;i++)s+=buf[i]*buf[i]; acc+=s/buf.length; n++;
+      if(n<8)return; const db=10*Math.log10(acc/n+1e-12); acc=0; n=0; if(db<-45)return;   // silence: leave the gain alone
+      const k=Math.pow(10,Math.max(-3,Math.min(3,(-15-db)))*0.5/20), v=Math.max(1,Math.min(6,g.gain.value*k)); g.gain.setTargetAtTime(v,ctx.currentTime,0.5) },100);
+    return g }
+  AudioNode.prototype.connect=function(dst,...r){
+    if(dst instanceof AudioDestinationNode&&!this.__lvl&&(this instanceof ScriptProcessorNode||(window.AudioWorkletNode&&this instanceof AudioWorkletNode))){
+      this.__lvl=1; const ctx=this.context; ctx.__lvl=ctx.__lvl||chain(ctx); return orig.call(this,ctx.__lvl) }
+    return orig.call(this,dst,...r) } })();
 const status=(t,err)=>{$('status').textContent=t;$('status').classList.toggle('err',!!err); if(err)setTimeout(()=>{try{runMarq()}catch(e){}},0)};
 if(!window.alphaTab){status('播放元件沒有載入成功，請重新整理頁面。',true);return}
 const base=new URL('.',location.href).href;
@@ -715,7 +732,7 @@ $('file').onchange=async e=>{const all=[...e.target.files]; e.target.value=''; i
   const f=all[0]; $('dlgp').hidden=true; pdfNote='';
   try{api.stop()}catch(x){}
   status('讀取 '+f.name+' …');
-  try{ const gb=new Uint8Array(await f.arrayBuffer()); lastGp={bytes:gb.slice(),name:f.name}; curSong=null; $('song').value=''; $('delsong').disabled=true; api.load(gb); if(ready)status('已開啟 '+f.name+'。檔案只在這台裝置上讀取，不會上傳。') }
+  try{ const gb=new Uint8Array(await f.arrayBuffer()); lastGp={bytes:gb.slice(),name:f.name}; curSong=null; $('song').value=''; $('delsong').disabled=true; try{api.stop()}catch(x){} clearAudio(); api.load(gb); if(ready)status('已開啟 '+f.name+'。檔案只在這台裝置上讀取，不會上傳。') }
   catch(x){status('這個檔案讀不出來。',true)} };
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button');if(b)b.blur()});
 /* iOS: Web Audio (the synth, metronome) is muted by the ring/silent switch unless the page is in the "playback" audio category.
@@ -772,7 +789,7 @@ function buildMixer(){ const box=$('mxrows'); if(!score){box.innerHTML='';return
     row.append(nm,eye,mu,so,r,vv); box.appendChild(row) }); box.appendChild(masterRow()) }
 // 總音量: one level for whatever is playing (合成, MP3 or YouTube), remembered on this device
 let master=(()=>{ const v=parseFloat(store.get('gp:master','1')); return isFinite(v)?Math.max(0,Math.min(1,v)):1 })();
-function applyMaster(){ const base=score&&score.tracks.length>1&&!mp3On()?0.75:1; try{api.masterVolume=base*master}catch(e){} try{ if(mp3On())M.setVol(master) }catch(e){} }
+function applyMaster(){ try{ if(mp3On()){ api.masterVolume=master; M.setVol(master) } else { api.masterVolume=score&&score.tracks.length>1?0.75:1; if(synthOut)synthOut.gain.value=master } }catch(e){} }
 function masterRow(){ const row=document.createElement('div'); row.className='mxrow mxmaster';
   const nm=document.createElement('span'); nm.className='nm'; nm.innerHTML='<b>總音量</b>'; nm.title='合成、MP3、YouTube 都會跟著變';
   const r=document.createElement('input'); r.type='range'; r.min=0; r.max=100; r.step=1; r.value=Math.round(master*100); r.setAttribute('aria-label','總音量');
@@ -830,9 +847,11 @@ async function saveSong(auto){ if(!lastGp||!score){ if(!auto)status('先用「�
     catch(e2){ status('存不進去，可能是裝置空間不足或瀏覽器不允許儲存。',true) } } }
 $('savesong').onclick=()=>saveSong(false);
 let saveTimer=0; const autoSave=()=>{ clearTimeout(saveTimer); saveTimer=setTimeout(()=>saveSong(true),600) };
+// a newly opened score starts on 合成: the previous song's MP3 / YouTube does not belong to it
+function clearAudio(){ try{ mp3=null; mp3name=''; M.pause(); $('src').value='synth'; $('src').options[1].disabled=true; $('src').options[1].textContent='MP3（還沒載入）'; ytReady=false; $('src').options[2].disabled=true; $('src').options[2].textContent='YouTube（還沒載入）'; $('ytbox').hidden=true; }catch(e){} }
 $('song').onchange=e=>{ const s=songs.find(x=>x.id===e.target.value); $('delsong').disabled=!s; $('delsong').textContent='刪除'; if(e.isTrusted)pdfNote=''; if(!s)return; if(!s.fromPdf)$('dlgp').hidden=true;
   try{api.stop()}catch(x){} curSong=s; lastGp={bytes:new Uint8Array(s.gp.slice(0)),name:s.gpName}; pendingSong=s;
-  mp3=null; mp3name=''; M.pause(); $('src').value='synth'; $('src').options[1].disabled=true; $('src').options[1].textContent='MP3（還沒載入）'; ytReady=false; $('src').options[2].disabled=true; $('src').options[2].textContent='YouTube（還沒載入）'; $('ytbox').hidden=true;
+  clearAudio();
   status('開啟 '+s.name+' …'); try{api.load(new Uint8Array(s.gp.slice(0)))}catch(x){status('這首歌的譜檔讀不出來。',true)} };
 $('delsong').onclick=async()=>{ const id=$('song').value; if(!id)return; const b=$('delsong');
   if(b.textContent!=='確定刪除？'){ b.textContent='確定刪除？'; setTimeout(()=>{b.textContent='刪除'},4000); return }
@@ -875,7 +894,7 @@ if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname
 // ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
 // pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
 let pdfjsLib=null, pdfNote='', pdfNoteT=0, dlUrl='';
-async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=66'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=66'; return pdfjsLib=m }
+async function loadPdfjs(){ if(pdfjsLib)return pdfjsLib; const m=await import(base+'pdfjs/pdf.min.mjs?v=68'); m.GlobalWorkerOptions.workerSrc=base+'pdfjs/pdf.worker.min.mjs?v=68'; return pdfjsLib=m }
 function askText(msg,val){ return new Promise(res=>{ const box=$('ask'), inp=$('askin'); $('askmsg').textContent=msg; inp.value=val; box.hidden=false; setTimeout(()=>{inp.focus();inp.select()},50);
   const done=v=>{ box.hidden=true; $('askok').onclick=$('askno').onclick=inp.onkeydown=null; res(v) };
   $('askok').onclick=()=>done(inp.value.trim()||val); $('askno').onclick=()=>done(val);
@@ -908,7 +927,7 @@ async function openPdf(files){ try{api.stop()}catch(x){}
     (checks.length?' 拍子加起來不是 4 拍、要看一下的小節：'+checks.join('；')+'。':'')+(failed.length?' 讀不進來：'+failed.join('、')+'。':'');
   pdfNoteT=Date.now(); showDl(first.bytes,first.gpName);
   if(saved||updated){ await refreshSongs(openRec?openRec.id:''); if(openRec){ $('song').value=openRec.id; $('song').onchange({target:$('song')}); $('dlgp').hidden=false; if(ready)status(pdfNote); return } }
-  lastGp={bytes:first.bytes.slice(),name:first.gpName}; curSong=null; $('song').value=''; $('delsong').disabled=true;
+  lastGp={bytes:first.bytes.slice(),name:first.gpName}; curSong=null; $('song').value=''; $('delsong').disabled=true; try{api.stop()}catch(x){} clearAudio();
   api.load(first.bytes.slice()); if(ready)status(pdfNote) }
 
 // ---- chord diagrams: shape from the score file if it defines one, otherwise from the chords-db dictionary
