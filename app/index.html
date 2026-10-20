@@ -335,9 +335,8 @@ body.roll .sheet{width:max-content;min-width:100%}
 .vm-fret-pills{display:flex;gap:3px;flex-wrap:wrap}
 .vm-fret-pills button{padding:2px 6px;min-height:26px;font-size:11px}
 
-/* Strumming Strip in Chord Panel */
-.strum-strip{display:inline-flex;align-items:center;gap:6px;background:rgba(128,128,128,.08);border:1px solid var(--line);border-radius:6px;padding:3px 8px;margin-top:2px;cursor:pointer;transition:border-color .15s}
-.strum-strip:hover{border-color:var(--accent)}
+/* Strumming Strip in Chord Panel (暫時隱藏) */
+.strum-strip{display:none!important}
 .strum-tag{font-size:11px;font-weight:700;color:var(--accent);white-space:nowrap;background:rgba(11,110,110,.12);padding:1px 6px;border-radius:4px}
 .strum-arrows{display:inline-flex;align-items:center;gap:3px;font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:15px;line-height:1}
 .strum-ar{display:inline-block;width:15px;text-align:center;color:var(--mute);transition:all .1s ease-out}
@@ -357,7 +356,7 @@ body.roll .sheet{width:max-content;min-width:100%}
       <div><span class="sec" id="sec"></span> 第 <span id="barno">1</span> 小節<button type="button" class="mini-edit-btn" id="editcurbar" title="編輯這小節和弦 (快速鍵 E)">✎ 編輯小節</button></div>
       <div class="now-lyric" id="nowLyric" hidden></div>
       <div class="lamps" id="lamps" aria-hidden="true"></div>
-      <div class="strum-strip" id="strumStrip" title="點擊切換主歌/副歌刷法">
+      <div class="strum-strip" id="strumStrip" title="點擊切換主歌/副歌刷法" hidden style="display:none!important">
         <span class="strum-tag" id="strumTag">主歌刷法</span>
         <div class="strum-arrows" id="strumArrows"></div>
         <button type="button" class="mini-edit-btn" id="editStrumBtn" title="編輯主歌/副歌刷法">🎵 刷法</button>
@@ -457,7 +456,7 @@ body.roll .sheet{width:max-content;min-width:100%}
       <!-- 分頁 1: 文字譜 / 刷法 -->
       <div id="ep_view_txt" class="ep-tab-view">
         <div class="ep-actions-row">
-          <button type="button" class="ep-btn-sm" id="txtdemo" title="填入周杰倫《晴天》和弦譜範例">填入範例 (晴天)</button>
+          <button type="button" class="ep-btn-sm" id="txtdemo" title="填入晴天 (A小調五聲音階) 和弦譜範例">填入範例 (晴天)</button>
           <label class="filebtn ep-btn-sm" style="display:inline-flex;align-items:center;cursor:pointer;">
             匯入 .txt<input type="file" id="txtfile" accept=".txt,text/plain" style="display:none;">
           </label>
@@ -471,7 +470,7 @@ body.roll .sheet{width:max-content;min-width:100%}
         <div class="ep-meta-grid">
           <label class="ep-field">
             <span>歌曲名稱</span>
-            <input type="text" id="txttitle" placeholder="例如：晴天" value="晴天">
+            <input type="text" id="txttitle" placeholder="例如：晴天 (A小調五聲音階)" value="晴天 (A小調五聲音階)">
           </label>
           <label class="ep-field">
             <span>歌手／演出者</span>
@@ -491,19 +490,19 @@ body.roll .sheet{width:max-content;min-width:100%}
           </div>
           <textarea id="txtin" class="ep-textarea" rows="8" placeholder="在此貼上和弦譜文字，例如：
 [Intro:arp4]
-Em  C  G  D x2
+Am  C  G  D x2
 
 [Verse:folk]
-Em          C
-故事的小黃花 從出生那年就飄著
+Am          C
+La  Do  Re  Mi  Sol  La
 G           D
-童年的盪鞦韆 隨記憶一直晃到現在
+Sol Mi  Re  Do  La
 
 [Chorus:pop8]
-Em          C
-颳風這天 我試過握著妳手
+Am          C
+6 1 2 3 5 6 (A-C-D-E-G-A)
 G           D
-但偏偏 雨漸漸 大到我看妳不見"></textarea>
+6 5 3 2 1 6 (A-G-E-D-C-A)"></textarea>
         </div>
 
         <!-- 視覺化刷法編輯器 -->
@@ -1547,7 +1546,7 @@ $('zip').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f
   await refreshSongs(curSong?curSong.id:'');
   status('已匯入 '+ok+' 首到歌單，其中 '+withMp3+' 首有 MP3。'+(failed?failed+' 個檔案讀不出來。':'')+(ok>withMp3?'沒有 MP3 的歌，選歌後再載入 MP3 就會自動補存。':''),failed>0&&ok===0); };
 refreshSongs('');
-if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname==='localhost')navigator.serviceWorker.register('sw.js?v=85').catch(()=>{});
+if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname==='localhost')navigator.serviceWorker.register('sw.js?v=88').catch(()=>{});
 
 // ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
 // pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
@@ -1701,6 +1700,11 @@ function setFull(on){ document.body.classList.toggle('focus',on); setTimeout(rol
     if(on&&!(d.fullscreenElement||d.webkitFullscreenElement)){ const r=(el.requestFullscreen||el.webkitRequestFullscreen); if(r){const q=r.call(el); if(q&&q.catch)q.catch(()=>{})} }
     else if(!on&&(d.fullscreenElement||d.webkitFullscreenElement)){ const x=(d.exitFullscreen||d.webkitExitFullscreen); if(x){const q=x.call(d); if(q&&q.catch)q.catch(()=>{})} } }catch(e){}
   setTimeout(()=>{try{api.render()}catch(e){}},300); }
+window.setFull = setFull;
+if ($('full')) $('full').onclick = () => setFull(!document.body.classList.contains('focus'));
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('focus')) setFull(false); });
+document.addEventListener('webkitfullscreenchange', () => { if (!document.webkitFullscreenElement && document.body.classList.contains('focus')) setFull(false); });
+
 // ---- txt chord sheet -> .gp via Txt2Gp and alphaTex
 function downloadBytes(bytes, name) {
   const blob = new Blob([bytes], { type: 'application/octet-stream' });
@@ -1713,32 +1717,32 @@ function downloadBytes(bytes, name) {
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
-const txtDemoSong = `Title: 晴天
+const txtDemoSong = `Title: 晴天 (A小調五聲音階)
 Artist: 周杰倫
 BPM: 100
 
 [Intro:arp4]
-Em  C  G  D x2
+Am  C  G  D x2
 
 [Verse:folk]
-Em          C
-故事的小黃花 從出生那年就飄著
+Am          C
+La  Do  Re  Mi  Sol  La
 G           D
-童年的盪鞦韆 隨記憶一直晃到現在
-Em          C
-Re So So Si Do Si La
+Sol Mi  Re  Do  La
+Am          C
+6   1   2   3   5   6
 G           D
-So La Si Si Si Si La Si La So
+5   3   2   1   6
 
 [Chorus:pop8]
-Em          C
-颳風這天 我試過握著妳手
+Am          C
+La  Do  Re  Mi  Sol  La
 G           D
-但偏偏 雨漸漸 大到我看妳不見
-Em          C
-還要多久 我才能夠在妳身邊
+Sol Mi  Re  Do  La
+Am          C
+6 1 2 3 5 6 (A-C-D-E-G-A)
 G           D
-等到放晴的那天 也許我會比較好一點`;
+6 5 3 2 1 6 (A-G-E-D-C-A)`;
 
 // ==========================================
 // 和弦譜整合編輯器控制器 (Integrated Chord & Score Editor)
@@ -2188,7 +2192,7 @@ function togglePane(open, targetTab) {
       const txtin = $('txtin');
       if (txtin && !txtin.value.trim()) {
         txtin.value = txtDemoSong;
-        $('txttitle').value = '晴天';
+        $('txttitle').value = '晴天 (A小調五聲音階)';
         $('txtartist').value = '周杰倫';
         $('txtbpm').value = 100;
       }
@@ -2330,7 +2334,7 @@ function initTxtBuilder() {
 
   $('txtdemo').onclick = () => {
     txtin.value = txtDemoSong;
-    $('txttitle').value = '晴天';
+    $('txttitle').value = '晴天 (A小調五聲音階)';
     $('txtartist').value = '周杰倫';
     $('txtbpm').value = 100;
     showEditorMsg('');
@@ -3641,6 +3645,10 @@ window.addEventListener('keydown', ev => {
   if (ev.key === 'e' || ev.key === 'E') {
     ev.preventDefault();
     openChordEditor(curBar);
+  }
+  if (ev.key === 'f' || ev.key === 'F') {
+    ev.preventDefault();
+    setFull(!document.body.classList.contains('focus'));
   }
 });
 
