@@ -10,6 +10,10 @@
   // 支援和弦本體 + 把位後綴（如 C(2), C:2, C@8, C:barre, C(barre), C(封閉), C(開放)）
   const CHORD_REGEX = new RegExp('^' + ROOT + QUALITY + '(?:\\/' + ROOT + ')?(?:(?:[:\\(-](?:\\d+|barre|open|封閉|開放)\\)?)|(?:@\\d+))?$');
   const CHORD_PURE = new RegExp('^' + ROOT + QUALITY + '(?:\\/' + ROOT + ')?$');
+  // N.C.（No Chord）：這段不彈，但歌詞照樣顯示。也接受 NC、N.C
+  const NC_REGEX = /^N\.?C\.?$/;
+  const NC = 'N.C.';
+  const isNC = name => NC_REGEX.test(String(name || '').trim());
   // "C+G" = 一小節兩個和弦；"C+" 本身是增和弦，所以只在 + 後面接根音時才切開
   const splitPlus = tok => tok.split(/\+(?=[A-G])/).filter(Boolean);
   const HEADER_REGEX = /^\s*\[(.+?)\]\s*(.*)$/;
@@ -302,6 +306,7 @@
 
   // 取得和弦的六弦按法（回傳 low E -> high E，-1 為不彈）
   function getChordFrets(chordName, customShapes) {
+    if (isNC(chordName)) return [-1, -1, -1, -1, -1, -1];   // N.C.：六條弦都不彈
     const norm = normalizeChord(chordName);
     if (!norm) return [0, 2, 2, 0, 0, 0];
     if (customShapes && customShapes[norm]) {
@@ -412,6 +417,7 @@
       for (const p of parts) {
         if (hasBar && /^[.\-]$/.test(p)) continue;
         const clean = p.replace(/:\d+$/, '');
+        if (isNC(clean)) { chordCount++; continue; }
         if (CHORD_REGEX.test(clean) || DEFAULT_SHAPES[clean] || (root.CHORDS && root.CHORDS[clean + '|major'])) {
           chordCount++;
         } else {
@@ -458,7 +464,7 @@
         if (num > 0) bars = num;
         name = name.slice(0, barsMatch.index);
       }
-      const chords = splitPlus(name).map(normalizeChord).filter(Boolean);
+      const chords = splitPlus(name).map(c => isNC(c) ? NC : normalizeChord(c)).filter(Boolean);
       if (!chords.length) continue;
 
       if (inBar && groups.length && groups[groups.length - 1].isBarGroup) {
@@ -644,6 +650,8 @@
 
   // 將步驟轉成 alphaTex 拍子字串
   function stepToAlphaTex(step, chordName, frets, isFirstBeat, barText) {
+    // N.C.：這一下改成休止（時值不變，小節照樣填滿），但保留 N.C. 標記和歌詞
+    if (isNC(chordName)) step = { type: 'rest', dur: step.dur, dot: step.dot };
     const highFrets = [frets[5], frets[4], frets[3], frets[2], frets[1], frets[0]]; // 弦 1 到 6 的品格
     const dur = step.dur || 4;
 
@@ -652,7 +660,7 @@
       fx.push('d');
     }
     if (isFirstBeat && chordName) {
-      const cleanChord = parseChordVoicingSpec(chordName).baseName || chordName;
+      const cleanChord = isNC(chordName) ? NC : (parseChordVoicingSpec(chordName).baseName || chordName);
       fx.push('ch "' + cleanChord + '"');
     }
     if (barText && isFirstBeat) {
@@ -900,7 +908,7 @@
     const chordDefs = [];
     const definedDefs = new Set();
     for (const c of chordSet) {
-      if (!c) continue;
+      if (!c || isNC(c)) continue;   // N.C. 沒有指型
       const clean = parseChordVoicingSpec(c).baseName || c;
       const f = getChordFrets(c, customShapes);
       // high E (f[5]) 到 low E (f[0])

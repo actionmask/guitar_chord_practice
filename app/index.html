@@ -251,6 +251,7 @@ body.roll .sheet{width:max-content;min-width:100%}
 .ep-footer{padding:10px 14px;border-top:1px solid var(--line);background:var(--panel);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
 .ep-footer-left{display:flex;gap:6px;align-items:center}
 .ep-foot-btn{font-size:13px;font-weight:600;padding:6px 12px;min-height:34px;border-radius:6px}
+.no-chord-edit .bar-edit-btn,.no-chord-edit #editcurbar,.no-chord-edit #ep_tab_chord{display:none !important}
 #chord_editor_btn,#ed_open_btn{display:inline-flex;align-items:center;gap:4px;font-weight:700}
 #chord_editor_btn[aria-pressed="true"],#ed_open_btn[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 @media (max-width:760px){
@@ -771,12 +772,16 @@ G           D
 <script src="soundfont.js?v=70"></script>
 <script src="chords.js?v=70"></script>
 <script src="pdfgp.js?v=70"></script>
-<script src="txt2gp.js?v=89"></script>
+<script src="txt2gp.js?v=93"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
 // 歌詞、和弦名稱、指型名稱都可能來自匯入的 txt／json／zip，放進 innerHTML 或屬性前一律跳脫
 const escHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// 「編輯小節和弦」功能還沒開放：入口全部藏起來（和弦方格的 ✎、和弦面板的「編輯小節」、點和弦名稱、
+// 編輯器的「編輯和弦」分頁），E 快捷鍵改開文字譜編輯器。要開放時改成 true 即可，程式碼都還在。
+const CHORD_EDIT_ENABLED = false;
+if (!CHORD_EDIT_ENABLED) document.documentElement.classList.add('no-chord-edit');
 // 合成 louder: the synth came out about 10 dB under a mastered MP3 (track volumes, dynamics, headroom).
 // Its output goes through a slow automatic gain (aims for MP3-like loudness) and a limiter so peaks never clip.
 let synthOut=null;   // 總音量 for 合成 sits after the automatic gain, so the two don't fight
@@ -938,6 +943,7 @@ function updateStrumStrip(bar){
 
 function cleanChordName(name) {
   if (!name) return '';
+  if (/^N\.?C\.?$/.test(String(name).trim())) return 'N.C.';   // 不彈的小節：顯示完整的 N.C.
   if (typeof Txt2Gp !== 'undefined' && Txt2Gp.parseChordVoicingSpec) {
     return Txt2Gp.parseChordVoicingSpec(name).baseName || name;
   }
@@ -2189,6 +2195,7 @@ function showEditorMsg(t, isErr = true) {
 
 // 整合三大功能分頁切換
 function switchMainEditorTab(tabKey) {
+  if (!CHORD_EDIT_ENABLED && tabKey === 'chord') tabKey = 'txt';
   if (curMainEditorTab === 'txt' && tabKey !== 'txt') {
     syncSectionsFromTxt();
   }
@@ -2838,6 +2845,7 @@ function getScoreSections() {
 }
 
 function openChordEditor(barIdx) {
+  if (!CHORD_EDIT_ENABLED) { togglePane(true, 'txt'); return; }   // 功能未開放：改開文字譜編輯器
   if (!score || !score.masterBars || !score.masterBars.length) {
     status('尚未載入樂譜，已為您切換至文字譜編輯器。編寫完成後點擊「即時同步」即可編輯各小節和弦！', true);
     togglePane(true, 'txt');
@@ -3712,7 +3720,7 @@ function resetCustomVoicing() {
 
 // 小節和弦按鈕與批次進行事件綁定
 if ($('editcurbar')) $('editcurbar').onclick = () => openChordEditor(curBar);
-if ($('chord')) $('chord').onclick = () => openChordEditor(curBar);
+if ($('chord') && CHORD_EDIT_ENABLED) $('chord').onclick = () => openChordEditor(curBar);   // 未開放時點和弦名稱不做事
 if ($('diabox')) $('diabox').onclick = () => openVoicingEditor();
 if ($('editStrumBtn')) $('editStrumBtn').onclick = () => togglePane(true, 'txt');
 if ($('chordeditbtn')) $('chordeditbtn').onclick = () => openChordEditor(curBar);

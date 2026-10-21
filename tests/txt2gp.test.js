@@ -222,3 +222,32 @@ test('an empty chord list or a missing bar changes nothing', () => {
   assert.equal(T.setBarChords('[V]\nC G', 1, []), null);
   assert.equal(T.setBarChords('[V]\nC G', 9, [{ name: 'F', posFrac: 0 }]), null);
 });
+
+// ---------- N.C.: a bar with lyrics but no music ----------
+test('N.C. makes a silent bar that keeps its lyric', () => {
+  const txt = '[V]\nC       N.C.    G\n我想要  （清唱）帶你去';
+  const b = bars(txt);
+  assert.deepEqual(b.map(x => x.chords[0]), ['C', 'N.C.', 'G']);
+  assert.deepEqual(b.map(x => x.text), ['我想要', '（清唱）', '帶你去']);
+  const res = build(txt);
+  assert.ok(!/\\chord \("N\.C/.test(res.tex), 'N.C. must not get a chord diagram');
+  const r = readTex(res.tex);
+  assert.deepEqual(r.bad, []);
+  const nc = r.sc.tracks[0].staves[0].bars[1].voices[0].beats;
+  assert.ok(nc.every(bt => bt.isRest), 'the N.C. bar should only have rests');
+  assert.equal(nc[0].chord && nc[0].chord.name, 'N.C.');
+  assert.ok(nc[0].text && nc[0].text.includes('清唱'), 'lyric should stay on the silent bar');
+});
+
+test('NC and N.C are accepted too', () => {
+  assert.deepEqual(chordsOf('[V]\nC NC G N.C'), ['C', 'N.C.', 'G', 'N.C.']);
+});
+
+test('N.C. inside a bar stops the music from that beat', () => {
+  const r = readTex(build('[V]\n|C . N.C. .|').tex);
+  assert.deepEqual(r.bad, []);
+  const beats = r.sc.tracks[0].staves[0].bars[0].voices[0].beats;
+  const half = beats.filter(bt => bt.playbackStart >= 1920);
+  assert.ok(half.length && half.every(bt => bt.isRest), 'beats 3-4 should be silent');
+  assert.ok(beats.some(bt => bt.playbackStart < 1920 && !bt.isRest), 'beats 1-2 still play C');
+});
