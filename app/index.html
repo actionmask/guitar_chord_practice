@@ -764,7 +764,7 @@ G           D
   <span class="sub" id="sub">選一個 Guitar Pro 檔，邊看譜邊聽</span>
   <span class="time" id="time">0:00 / 0:00</span>
   <div class="marq" id="marq" aria-live="polite"><span class="status" id="status">載入中…</span></div>
-  <button class="ver" id="ver" title="說明">v85</button>
+  <button class="ver" id="ver" title="說明">v97</button>
 </footer>
 <div class="mixer" id="mixer" hidden role="dialog" aria-label="音軌/譜面">
   <div class="mxhead"><b>音軌/譜面</b><span class="mxnote" id="mxnote"></span><button id="mxclose" aria-label="關閉音軌">關閉</button></div>
@@ -1578,6 +1578,16 @@ $('zip').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f
   status('已匯入 '+ok+' 首到歌單，其中 '+withMp3+' 首有 MP3。'+(failed?failed+' 個檔案讀不出來。':'')+(ok>withMp3?'沒有 MP3 的歌，選歌後再載入 MP3 就會自動補存。':''),failed>0&&ok===0); };
 refreshSongs('');
 if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname==='localhost')navigator.serviceWorker.register('sw.js?v=88').catch(()=>{});
+// 右下角的版本號直接讀目前生效的快取名稱（sw.js 的 VERSION），不用再手動改
+async function showVersion(){ try{ const ks=(await caches.keys()).filter(k=>/^gp-practice-v\d+$/.test(k)); if(!ks.length)return;
+  const n=Math.max(...ks.map(k=>+k.split('-v').pop())); $('ver').textContent='v'+n; }catch(e){} }
+showVersion();
+// 新版的 service worker 裝好接手後：編輯器沒在用就自動重新整理一次換成新版；正在編輯就只提示，免得打到一半的內容不見
+if('serviceWorker' in navigator){ const hadController=!!navigator.serviceWorker.controller; let swReloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(!hadController){ showVersion(); return } if(swReloaded)return;   // 版本號只在重新整理後才變，代表「目前這個頁面」的版本
+    const editing=!$('editor_pane').hidden||($('txtin')&&$('txtin').value.trim());
+    if(editing){ status('新版本已下載，存好目前的內容後重新整理頁面就會更新。'); return }
+    swReloaded=true; location.reload(); }); }
 
 // ---- the teacher's PDF tabs (vector PDFs exported from Guitar Pro) -> .gp, right here in the browser.
 // pdfgp.js is a port of pdf-tool (Python); pdf.js reads the PDF. Nothing is uploaded.
