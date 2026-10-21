@@ -825,6 +825,15 @@ const api=new alphaTab.AlphaTabApi($('at'),{
   display:{scale:+$('zoom').value,staveProfile:VIEW.value==='jianpu'?alphaTab.StaveProfile.Default:alphaTab.StaveProfile.Tab,layoutMode:isRoll()?alphaTab.LayoutMode.Horizontal:alphaTab.LayoutMode.Page},
   player:{scrollMode:alphaTab.ScrollMode.Off,scrollSpeed:0,nativeBrowserSmoothScroll:false,enablePlayer:true,outputMode:alphaTab.PlayerOutputMode.WebAudioScriptProcessor,...(SOUNDFONT_FILE?{soundFont:base+SOUNDFONT_FILE}:{}),scrollElement:$('wrap'),enableCursor:true,enableUserInteraction:true,scrollOffsetY:-20}
 });
+// 譜面上的歌詞（拍子文字 = NotationElement.EffectText）預設是 Georgia 12 斜體：Georgia 沒有中文字，中文會被硬拉成斜的。
+// 改成正體、優先用中文字型。alphaTab 1.8 每種元素各有字型（elementFonts），只改 EffectText；
+// 和弦名稱、原生的搥勾／滑音字樣不受影響。從 PDF 轉出的 H／P／sl. 是以文字寫進譜的，會一起變正體。
+try {
+  api.settings.display.resources.elementFonts.set(alphaTab.NotationElement.EffectText, alphaTab.model.Font.withFamilyList(
+    ['Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', 'Noto Sans CJK TC', 'sans-serif'],
+    13, alphaTab.model.FontStyle.Plain, alphaTab.model.FontWeight.Regular));
+  api.updateSettings();
+} catch (e) {}
 let ownClock=false, score=null, track=0, ready=false, playing=false, wl=null; let vis=[0], mix=[];   // tracks shown in the score; per-track mixer settings
 function wake(on){try{ if(on){ if(!wl&&navigator.wakeLock)navigator.wakeLock.request('screen').then(l=>{wl=l;l.addEventListener('release',()=>{if(wl===l)wl=null})}).catch(()=>{}) } else if(wl){const l=wl;wl=null;l.release().catch(()=>{})} }catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&playing)wake(true)});
