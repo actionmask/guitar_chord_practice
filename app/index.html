@@ -776,7 +776,7 @@ G           D
 <script src="soundfont.js?v=70"></script>
 <script src="chords.js?v=70"></script>
 <script src="pdfgp.js?v=70"></script>
-<script src="txt2gp.js?v=97"></script>
+<script src="txt2gp.js?v=102"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -1906,6 +1906,28 @@ function getPresetInfo(patName) {
   return null;
 }
 
+// txt 開頭的全曲刷法（Strum: folk 或 刷法: D-D-DUDU），沒寫就是 null
+function headerStrumOf(text) {
+  const m = /^\s*(?:strum|刷法)\s*[:：]\s*(\S+)/im.exec(text || '');
+  return m ? m[1] : null;
+}
+// 介面上改了刷法：同步寫回 txt（全曲預設寫成開頭的 Strum: 並拿掉段落標籤上的刷法；段落寫成 [名稱:刷法]）
+function writeStrumToTxt() {
+  const t = $('txtin');
+  if (!t || !t.value.trim() || !window.Txt2Gp || !Txt2Gp.setSongStrum) return;
+  const sp = sectionPatterns[curStrumTab];
+  if (!sp) return;
+  const val = sp.patternVal && sp.patternVal !== 'custom' ? sp.patternVal : sp.tokens.join('');
+  if (curStrumTab === 'default') {
+    t.value = Txt2Gp.setSongStrum(t.value, val);
+    sp.headerStrum = val;
+    for (const k in sectionPatterns) if (k !== 'default') sectionPatterns[k].tagPattern = null;
+  } else {
+    t.value = Txt2Gp.setSectionStrum(t.value, curStrumTab, val);
+    sp.tagPattern = val;   // 和 txt 一致，下次同步時不會被當成「標籤改了」重新套用
+  }
+}
+
 // txt 開頭的拍號（TS: 3/4 或 拍號: 6/8），沒寫就是 4/4
 function headerTsOf(text) {
   const m = /^\s*(?:ts|拍號)\s*[:：]\s*(\d+)\s*\/\s*(\d+)/im.exec(text || '');
@@ -2025,6 +2047,7 @@ function syncCodeFromTokens() {
     sectionPatterns[curStrumTab].auto = false;   // 使用者自己改過，之後換拍號也不要自動蓋掉
     if (curStrumTab === 'default') applyDefaultToAllSections();   // 全曲預設：套用到所有段落
     else sectionPatterns[curStrumTab].inherit = false;            // 這一段另外設定，不再跟著全曲預設
+    writeStrumToTxt();                                            // 同步寫回 txt
   }
   renderSectionTabs(getDetectedSectionsFromTxt());
   setEditorStatus('刷法已自訂 (' + curStrumTab + ')');
@@ -2091,9 +2114,16 @@ function syncSectionsFromTxt() {
   const replaced = new Set();
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-  // 全曲預設還沒被使用者改過時，跟著 TS: 拍號換成對應的四分音符下刷
+  // 全曲預設：txt 開頭有 Strum: 就照它；沒有的話，還沒被使用者改過時跟著 TS: 拍號換成對應的四分音符下刷
+  const hdrStrum = headerStrumOf($('txtin') ? $('txtin').value : '');
+  const hp = hdrStrum ? getPresetInfo(hdrStrum) : null;
   const def = sectionPatterns.default;
-  if (!def || (def.auto && def.autoTs !== ts)) {
+  if (hp) {
+    if (!def || def.headerStrum !== hdrStrum) {
+      sectionPatterns.default = { tokens: hp.code.split(''), mode: hp.mode, beats: hp.beats, patternVal: hp.key, headerStrum: hdrStrum };
+      replaced.add('default');
+    }
+  } else if (!def || (def.auto && def.autoTs !== ts) || def.headerStrum) {
     sectionPatterns.default = tsDefaultPatternEntry(ts);
     replaced.add('default');
   }
@@ -2751,6 +2781,7 @@ function initTxtBuilder() {
           sectionPatterns[curStrumTab].auto = false;
           if (curStrumTab === 'default') applyDefaultToAllSections();   // 全曲預設：套用到所有段落
           else sectionPatterns[curStrumTab].inherit = false;
+          writeStrumToTxt();                                            // 同步寫回 txt
         }
         renderSectionTabs(getDetectedSectionsFromTxt());
         setEditorStatus('已選用 ' + ($('txtpattern').selectedOptions[0]?.text || v));

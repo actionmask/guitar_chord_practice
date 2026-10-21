@@ -519,11 +519,12 @@
       }
 
       // 解析前導資訊（Title, Artist, BPM, Tempo）
-      const metaMatch = trimmed.match(/^(title|歌名|artist|歌手|原唱|bpm|tempo|速度|ts|拍號)\s*[:：]\s*(.+)$/i);
+      const metaMatch = trimmed.match(/^(title|歌名|artist|歌手|原唱|bpm|tempo|速度|ts|拍號|strum|刷法)\s*[:：]\s*(.+)$/i);
       if (metaMatch) {
         const key = metaMatch[1].toLowerCase();
         const val = metaMatch[2].trim();
-        if (key === 'title' || key === '歌名') meta.title = val;
+        if (key === 'strum' || key === '刷法') meta.strum = val;   // 全曲預設刷法（沒標刷法的段落都用這個）
+        else if (key === 'title' || key === '歌名') meta.title = val;
         else if (key === 'artist' || key === '歌手' || key === '原唱') meta.artist = val;
         else if (key === 'bpm' || key === 'tempo' || key === '速度') {
           const num = parseInt(val, 10);
@@ -842,7 +843,11 @@
     };
     // 全曲預設：呼叫端傳的 default 若和 TS: 拍號不合，視為沒指定（介面的預設值是 4/4 民謠）
     const weakDefault = resolvePattern(patternsMap.default || opts.pattern || null, null);
-    const fallbackPattern = (weakDefault && !(headerTs && tsKey(weakDefault.ts) !== tsKey(headerTs))) ? weakDefault : autoPattern('strum');
+    // txt 開頭的 Strum: 是明確寫下的全曲預設，優先於其他預設
+    const headerStrum = meta.strum ? resolvePattern(meta.strum, null) : null;
+    if (meta.strum && !headerStrum) warn('看不懂開頭的刷法「' + meta.strum + '」，改用預設刷法。');
+    const fallbackPattern = headerStrum ||
+      ((weakDefault && !(headerTs && tsKey(weakDefault.ts) !== tsKey(headerTs))) ? weakDefault : autoPattern('strum'));
 
     function resolvePatternForSection(sec) {
       if (!sec) return fallbackPattern;
@@ -857,15 +862,9 @@
         if (rp) return rp;
         warn('看不懂「' + sec.name + '」的刷法「' + sec.pattern + '」，改用預設刷法。');
       }
-      // 3. 依段落名稱自動配對主歌 vs 副歌（依拍號挑預設）
-      if (/chorus|副歌|高潮/.test(sName)) {
-        if (patternsMap.chorus) return resolvePattern(patternsMap.chorus);
-        return autoPattern('chorus');
-      }
-      if (/verse|主歌|段落|a段|b段/.test(sName)) {
-        if (patternsMap.verse) return resolvePattern(patternsMap.verse);
-        return autoPattern('strum');
-      }
+      // 3. 其他段落一律用全曲預設（txt 的 Strum:、介面的全曲預設，或依拍號的四分音符下刷）
+      if (/chorus|副歌|高潮/.test(sName) && patternsMap.chorus) return resolvePattern(patternsMap.chorus);
+      if (/verse|主歌|段落|a段|b段/.test(sName) && patternsMap.verse) return resolvePattern(patternsMap.verse);
       return fallbackPattern;
     }
 
@@ -1086,6 +1085,51 @@
     return null;
   }
 
+  // ---------- 把介面上改的刷法寫回 txt ----------
+  // 段落標籤 [Name] / [Name:刷法] / [Name pattern=刷法] 的「名稱」部分
+  function headerName(inner) {
+    const colIdx = inner.indexOf(':'), eqIdx = inner.indexOf('=');
+    if (colIdx > 0) return inner.slice(0, colIdx).trim();
+    if (eqIdx > 0) return inner.slice(0, eqIdx).replace(/pattern\s*$/i, '').trim();
+    return inner.trim();
+  }
+  function mapLines(txt, fn) {
+    const eol = /\r\n/.test(txt) ? '\r\n' : '\n';
+    return txt.replace(/\r\n?/g, '\n').split('\n').map(fn).join(eol);
+  }
+  // 設定某個段落的刷法：同名的段落標籤全部改成 [名稱:刷法]（value 為空就拿掉刷法，只留 [名稱]）
+  function setSectionStrum(txt, sectionName, value) {
+    const want = String(sectionName || '').trim().toLowerCase();
+    return mapLines(txt, line => {
+      const m = HEADER_REGEX.exec(line);
+      if (!m) return line;
+      const name = headerName(m[1]);
+      if (name.toLowerCase() !== want) return line;
+      return line.replace('[' + m[1] + ']', '[' + name + (value ? ':' + value : '') + ']');
+    });
+  }
+  // 設定全曲預設刷法：開頭的 Strum: 行（沒有就加在 Title／BPM 等資訊後面），
+  // 並拿掉所有段落標籤上的刷法——全曲預設會套用到所有段落，txt 也要一致
+  function setSongStrum(txt, value) {
+    const eol = /\r\n/.test(txt) ? '\r\n' : '\n';
+    const lines = txt.replace(/\r\n?/g, '\n').split('\n');
+    const metaRe = /^\s*(title|歌名|artist|歌手|原唱|bpm|tempo|速度|ts|拍號|strum|刷法)\s*[:：]/i;
+    const strumRe = /^\s*(strum|刷法)\s*[:：]/i;
+    let found = false, lastMeta = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (HEADER_REGEX.test(lines[i])) break;   // 第一個段落之後就不是開頭資訊了
+      if (strumRe.test(lines[i])) { lines[i] = 'Strum: ' + value; found = true; }
+      if (metaRe.test(lines[i])) lastMeta = i;
+    }
+    if (!found) lines.splice(lastMeta + 1, 0, 'Strum: ' + value);
+    return lines.map(line => {
+      const m = HEADER_REGEX.exec(line);
+      if (!m) return line;
+      const name = headerName(m[1]);
+      return name === m[1].trim() ? line : line.replace('[' + m[1] + ']', '[' + name + ']');
+    }).join(eol);
+  }
+
   // 主入口：將 txt 轉為 alphaTex 與 .gp 檔案
   function convertTxtToGp(txt, opts) {
     opts = opts || {};
@@ -1139,7 +1183,9 @@
     displayWidth,
     getBarChords,
     setBarChords,
-    formatBarChords
+    formatBarChords,
+    setSectionStrum,
+    setSongStrum
   };
 
   if (typeof module !== 'undefined' && module.exports) {

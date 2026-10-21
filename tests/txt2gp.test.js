@@ -265,3 +265,32 @@ test('without strum tags every section strums quarter notes down', () => {
     });
   }
 });
+
+// ---------- strum settings written into the txt ----------
+test('a Strum: header sets the song-wide strum for untagged sections', () => {
+  const r = readTex(build('Strum: D-DU-UDU\n[Verse]\nC\n[Chorus:pop8]\nG').tex);
+  assert.deepEqual(r.bad, []);
+  const strokes = bar => bar.voices[0].beats.filter(b => !b.isRest && !b.notes.some(n => n.isTieDestination))
+    .map(b => b.pickStroke === alphaTab.model.PickStroke.Up ? 'U' : 'D').join('');
+  const [verse, chorus] = r.sc.tracks[0].staves[0].bars;
+  assert.equal(strokes(verse), 'DDUUDU');        // D-DU-UDU
+  assert.equal(strokes(chorus), 'DDUDDU');       // pop8 = D-DUD-DU, the tag still wins for its own section
+  assert.equal(T.parseSongTxt('刷法: folk\n[V]\nC').meta.strum, 'folk');
+});
+
+test('setSectionStrum writes the pattern into every header of that section', () => {
+  const txt = 'Title: t\n[Verse]\nC G\n[Chorus:pop8] F\n[verse]\nAm';
+  const out = T.setSectionStrum(txt, 'Verse', 'D-DUD-DU');
+  assert.equal(out, 'Title: t\n[Verse:D-DUD-DU]\nC G\n[Chorus:pop8] F\n[verse:D-DUD-DU]\nAm');
+  assert.equal(T.setSectionStrum(out, 'Chorus', 'folk').split('\n')[3], '[Chorus:folk] F');
+  assert.equal(T.setSectionStrum(out, 'Verse', null).split('\n')[1], '[Verse]');
+});
+
+test('setSongStrum adds or replaces the Strum: line and clears section tags', () => {
+  const txt = 'Title: t\nBPM: 90\n\n[Verse:folk]\nC\n[Chorus:pop8] G';
+  const out = T.setSongStrum(txt, 'strum4');
+  assert.equal(out, 'Title: t\nBPM: 90\nStrum: strum4\n\n[Verse]\nC\n[Chorus] G');
+  assert.equal(T.setSongStrum(out, 'chop').split('\n')[2], 'Strum: chop');
+  assert.equal(T.setSongStrum('[V]\nC', 'folk'), 'Strum: folk\n[V]\nC');
+  assert.equal(T.setSongStrum('Title: a\r\n[V:folk]\r\nC', 'pop8'), 'Title: a\r\nStrum: pop8\r\n[V]\r\nC');
+});
