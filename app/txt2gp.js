@@ -191,7 +191,9 @@
     pop8: definePattern('pop8', '流行八分 (下 - 下上 下 - 下上)', 'D-DUD-DU', 'strum', [4, 4], 8),
     pop8_basic: definePattern('pop8_basic', '入門八分 (下 下 下上下上)', 'D-D-DUDU', 'strum', [4, 4], 8),
     straight_8: definePattern('straight_8', '連續八分刷 (搖滾推進)', 'DUDUDUDU', 'strum', [4, 4], 8),
-    strum4: definePattern('strum4', '抒情四分刷 (下 下 下 下)', 'D-D-D-D-', 'strum', [4, 4], 8),
+    strum4: definePattern('strum4', '四分音符下刷 (下 下 下 下)', 'D-D-D-D-', 'strum', [4, 4], 8),
+    strum4_34: definePattern('strum4_34', '四分音符下刷 3/4 (下 下 下)', 'D-D-D-', 'strum', [3, 4], 8),
+    strum4_68: definePattern('strum4_68', '附點四分下刷 6/8 (下 下)', 'D--D--', 'strum', [6, 8], 8),
     folk_16: definePattern('folk_16', '十六分精緻民謠 (輕快切分)', 'D--UD--UD-DU-UDU', 'strum', [4, 4], 16),
     syncopated_pop: definePattern('syncopated_pop', '強烈切分流行刷 (副歌推進)', 'D---D-UD-UD-DU-U', 'strum', [4, 4], 16),
     whole_note: definePattern('whole_note', '全音符長音 (結尾/靜態刷)', 'D-------', 'strum', [4, 4], 8),
@@ -227,11 +229,11 @@
   PATTERNS['waltz_classic'] = PATTERNS.waltz;
   PATTERNS['arp_t123'] = PATTERNS.arp4;
 
-  // 各拍號沒指定刷法時的預設（主歌用 strum、副歌用 chorus）
+  // 各拍號沒指定刷法時的預設：所有段落（主歌、副歌都一樣）都是四分音符下刷，6/8 是每個附點四分一下
   const TS_DEFAULT_PATTERNS = {
-    '4/4': { strum: 'folk', chorus: 'pop8' },
-    '3/4': { strum: 'waltz_folk', chorus: 'waltz_pop' },
-    '6/8': { strum: 'folk_68', chorus: 'slow_rock_68' }
+    '4/4': { strum: 'strum4', chorus: 'strum4' },
+    '3/4': { strum: 'strum4_34', chorus: 'strum4_34' },
+    '6/8': { strum: 'strum4_68', chorus: 'strum4_68' }
   };
 
   const PATTERNS_ALIAS = {

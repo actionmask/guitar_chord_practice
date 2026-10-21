@@ -251,3 +251,17 @@ test('N.C. inside a bar stops the music from that beat', () => {
   assert.ok(half.length && half.every(bt => bt.isRest), 'beats 3-4 should be silent');
   assert.ok(beats.some(bt => bt.playbackStart < 1920 && !bt.isRest), 'beats 1-2 still play C');
 });
+
+// ---------- default strum: quarter-note down strokes ----------
+test('without strum tags every section strums quarter notes down', () => {
+  for (const [hdr, beatsPerBar, ts] of [['', 4, '4/4'], ['TS: 3/4\n', 3, '3/4'], ['TS: 6/8\n', 2, '6/8']]) {
+    const r = readTex(build(hdr + '[Verse]\nC\n[Chorus]\nG').tex);
+    assert.deepEqual(r.bad, [], ts);
+    r.sc.tracks[0].staves[0].bars.forEach((bar, i) => {
+      const struck = bar.voices[0].beats.filter(b => !b.isRest && !b.notes.some(n => n.isTieDestination));
+      assert.equal(struck.length, beatsPerBar, ts + ' bar ' + (i + 1));
+      // alphaTex 的 sd／su 是撥弦方向（pickStroke），不是刷奏記號（brushType）
+      assert.ok(struck.every(b => b.pickStroke === alphaTab.model.PickStroke.Down), ts + ' should be down strokes');
+    });
+  }
+});

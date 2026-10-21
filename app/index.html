@@ -512,12 +512,16 @@ G           D
             <span class="ep-section-title">🎸 節奏刷法編輯器</span>
             <div class="ep-submodes">
               <select id="txtpattern" class="ep-select-mini" aria-label="刷法預設">
+                <optgroup label="四分音符下刷（預設）">
+                  <option value="strum4" selected>四分音符下刷 4/4 (下 下 下 下)</option>
+                  <option value="strum4_34">四分音符下刷 3/4 (下 下 下)</option>
+                  <option value="strum4_68">附點四分下刷 6/8 (下 下)</option>
+                </optgroup>
                 <optgroup label="民謠與流行 (4/4)">
-                  <option value="folk" selected>經典民謠 (Old Faithful)</option>
+                  <option value="folk">經典民謠 (Old Faithful)</option>
                   <option value="pop8">流行八分 (下 - 下上 下 - 下上)</option>
                   <option value="pop8_basic">入門八分 (下 下 下上下上)</option>
                   <option value="straight_8">連續八分 (搖滾推進)</option>
-                  <option value="strum4">四分音符下刷 (抒情四拍)</option>
                   <option value="folk_16">十六分精緻民謠 (輕快切分)</option>
                   <option value="syncopated_pop">強烈切分流行刷 (副歌推進)</option>
                   <option value="whole_note">全音符長音 (結尾/靜態刷)</option>
@@ -772,7 +776,7 @@ G           D
 <script src="soundfont.js?v=70"></script>
 <script src="chords.js?v=70"></script>
 <script src="pdfgp.js?v=70"></script>
-<script src="txt2gp.js?v=93"></script>
+<script src="txt2gp.js?v=97"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -1779,9 +1783,10 @@ G           D
 // 3. 🎨 自訂指型 ('voicing')
 // ==========================================
 let curMainEditorTab = 'txt'; // 'txt' | 'chord' | 'voicing'
-let curStrumTab = 'Intro'; // 當前選中的段落刷法分頁
+let curStrumTab = 'default'; // 當前選中的段落刷法分頁（預設是「全曲預設」）
+// 全曲預設：四分音符下刷。各段落沒另外設定時跟著全曲預設走（inherit），改全曲預設會套用到所有段落
 const sectionPatterns = {
-  default: { tokens: ['D','-','D','U','-','U','D','U'], mode: 'strum', beats: '8', patternVal: 'folk' }
+  default: { tokens: ['D','-','D','-','D','-','D','-'], mode: 'strum', beats: '8', patternVal: 'strum4', auto: true, autoTs: '4/4' }
 };
 
 // 23 款經典伴奏型代碼與模式定義
@@ -1793,6 +1798,8 @@ const PRESET_CODES = {
   pop8_basic: { code: 'D-D-DUDU', mode: 'strum', beats: '8', name: '入門八分 (下 下 下上下上)' },
   straight_8: { code: 'DUDUDUDU', mode: 'strum', beats: '8', name: '連續八分 (搖滾推進)' },
   strum4: { code: 'D-D-D-D-', mode: 'strum', beats: '8', name: '四分音符下刷 (抒情四拍)' },
+  strum4_34: { code: 'D-D-D-', mode: 'strum', beats: '6', name: '四分音符下刷 3/4' },
+  strum4_68: { code: 'D--D--', mode: 'strum', beats: '6', name: '附點四分下刷 6/8' },
   folk_16: { code: 'D--UD--UD-DU-UDU', mode: 'strum', beats: '16', name: '十六分精緻民謠 (輕快切分)' },
   syncopated_pop: { code: 'D---D-UD-UD-DU-U', mode: 'strum', beats: '16', name: '強烈切分流行刷 (副歌推進)' },
   whole_note: { code: 'D-------', mode: 'strum', beats: '8', name: '全音符長音 (結尾/靜態刷)' },
@@ -1929,7 +1936,7 @@ function getDetectedSectionsFromTxt() {
 }
 
 let activeSlot = 0;
-let peTokens = ['D', '-', 'D', 'U', '-', 'U', 'D', 'U'];
+let peTokens = ['D', '-', 'D', '-', 'D', '-', 'D', '-'];   // 四分音符下刷
 const STRUM_CYCLE = ['D', 'U', 'X', '-', '.'];
 const ARP_CYCLE = ['B', '3', '2', '1', '4', '-', '.'];
 const BEAT_LABELS = {
@@ -2006,6 +2013,8 @@ function syncCodeFromTokens() {
     sectionPatterns[curStrumTab].beats = $('pe_beats')?.value || '8';
     sectionPatterns[curStrumTab].patternVal = 'custom';
     sectionPatterns[curStrumTab].auto = false;   // 使用者自己改過，之後換拍號也不要自動蓋掉
+    if (curStrumTab === 'default') applyDefaultToAllSections();   // 全曲預設：套用到所有段落
+    else sectionPatterns[curStrumTab].inherit = false;            // 這一段另外設定，不再跟著全曲預設
   }
   renderSectionTabs(getDetectedSectionsFromTxt());
   setEditorStatus('刷法已自訂 (' + curStrumTab + ')');
@@ -2044,62 +2053,66 @@ function applyTokensFromCode(str) {
 }
 
 // 依據 TXT 和弦歌詞譜動態更新節奏刷法編輯器的段落分頁
-function syncSectionsFromTxt() {
-  const detected = getDetectedSectionsFromTxt();
-  const list = detected.length ? detected : [
-    { name: '主歌', pattern: 'folk' },
-    { name: '副歌', pattern: 'pop8' }
-  ];
+// 刷法的規則：
+// ・全曲預設：四分音符下刷（依 txt 開頭的 TS: 拍號挑 4/4、3/4 或 6/8 的版本）。
+// ・每個段落一開始都「跟著全曲預設」（inherit）；在全曲預設改刷法，會套用到所有段落。
+// ・之後在某個段落另外改，只改那一段；txt 段落標籤寫了刷法（[Verse:folk]）的也照標籤。
+function tsDefaultPatternEntry(ts) {
+  const set = (window.Txt2Gp && Txt2Gp.TS_DEFAULT_PATTERNS && Txt2Gp.TS_DEFAULT_PATTERNS[ts]) || { strum: 'strum4' };
+  const p = getPresetInfo(set.strum) || getPresetInfo('strum4');
+  return { tokens: p.code.split(''), mode: p.mode, beats: p.beats, patternVal: p.key, tagPattern: null, auto: true, autoTs: ts };
+}
+// 一份跟著全曲預設的段落刷法
+function inheritDefaultEntry(tagPattern) {
+  const d = sectionPatterns.default;
+  return { tokens: d.tokens.slice(), mode: d.mode, beats: d.beats, patternVal: d.patternVal, tagPattern: tagPattern || null, inherit: true };
+}
+// 全曲預設改了：套用到所有段落（包含之前另外改過的段落）
+function applyDefaultToAllSections() {
+  for (const k in sectionPatterns) {
+    if (k === 'default') continue;
+    sectionPatterns[k] = inheritDefaultEntry(sectionPatterns[k] && sectionPatterns[k].tagPattern);
+  }
+}
 
-  // 沒指定刷法的段落依 txt 開頭的拍號（TS: 3/4、6/8…）挑預設；拍號改了，這些自動挑的也跟著換
+function syncSectionsFromTxt() {
+  const list = getDetectedSectionsFromTxt();
   const ts = headerTsOf($('txtin') ? $('txtin').value : '');
-  const autoEntry = sName => {
-    const set = (window.Txt2Gp && Txt2Gp.TS_DEFAULT_PATTERNS && Txt2Gp.TS_DEFAULT_PATTERNS[ts]) || { strum: 'folk', chorus: 'pop8' };
-    const arpByTs = { '3/4': 'arp_waltz_34', '6/8': 'arp_slow_rock_68' };
-    const key = sName === 'default' ? set.strum
-      : /chorus|副歌|高潮/i.test(sName) ? set.chorus
-      : /arp|intro|前奏|指彈/i.test(sName) ? (arpByTs[ts] || 'arp4') : set.strum;
-    const p = getPresetInfo(key) || getPresetInfo('folk');
-    return { tokens: p.code.split(''), mode: p.mode, beats: p.beats, patternVal: p.key, tagPattern: null, auto: true, autoTs: ts };
-  };
-  const stale = sp => !sp || (sp.auto && sp.autoTs !== ts);
   const replaced = new Set();
-  if (stale(sectionPatterns['default'])) { sectionPatterns['default'] = autoEntry('default'); replaced.add('default'); }
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // 全曲預設還沒被使用者改過時，跟著 TS: 拍號換成對應的四分音符下刷
+  const def = sectionPatterns.default;
+  if (!def || (def.auto && def.autoTs !== ts)) {
+    sectionPatterns.default = tsDefaultPatternEntry(ts);
+    replaced.add('default');
+  }
 
   list.forEach(sec => {
     const sName = sec.name;
+    if (sName === 'default') return;
     const specified = sec.pattern ? getPresetInfo(sec.pattern) : null;
-
-    // 段落標籤上的刷法（[Verse:folk]）被拿掉了：這段改回依拍號自動挑，不要留著舊標籤的刷法
-    const tagRemoved = !specified && sectionPatterns[sName] && sectionPatterns[sName].tagPattern;
-    if (!sectionPatterns[sName] || tagRemoved || (!specified && stale(sectionPatterns[sName]))) {
+    const cur = sectionPatterns[sName];
+    let next = null;
+    if (specified) {
+      // 段落標籤寫了刷法：新出現或標籤改了才套用（套用全曲預設之後不會被標籤蓋回去）
+      if (!cur || cur.tagPattern !== sec.pattern) {
+        next = { tokens: specified.code.split(''), mode: specified.mode, beats: specified.beats, patternVal: specified.key, tagPattern: sec.pattern };
+      }
+    } else if (!cur || cur.tagPattern || cur.inherit || cur.auto) {
+      // 沒指定（或標籤上的刷法被拿掉了）：跟著全曲預設
+      next = inheritDefaultEntry(null);
+    }
+    if (next && !same(next, cur)) {
+      sectionPatterns[sName] = next;
       replaced.add(sName);
-      if (specified) {
-        sectionPatterns[sName] = {
-          tokens: specified.code.split(''),
-          mode: specified.mode,
-          beats: specified.beats,
-          patternVal: specified.key,
-          tagPattern: sec.pattern
-        };
-      } else {
-        sectionPatterns[sName] = autoEntry(sName);
-      }
-    } else if (sec.pattern && sectionPatterns[sName].tagPattern !== sec.pattern) {
-      if (specified) {
-        sectionPatterns[sName].tokens = specified.code.split('');
-        sectionPatterns[sName].mode = specified.mode;
-        sectionPatterns[sName].beats = specified.beats;
-        sectionPatterns[sName].patternVal = specified.key;
-        sectionPatterns[sName].tagPattern = sec.pattern;
-      }
     }
   });
 
   renderSectionTabs(list);
 
   if (!sectionPatterns[curStrumTab]) {
-    curStrumTab = list[0].name;
+    curStrumTab = 'default';
     loadSectionToEditor(curStrumTab);
   } else if (replaced.has(curStrumTab)) {
     loadSectionToEditor(curStrumTab);   // 編輯器畫面要換成新挑的刷法，不然下次轉檔又被舊的蓋回去
@@ -2113,10 +2126,9 @@ function renderSectionTabs(sections) {
   if (!container) return;
   container.innerHTML = '';
 
-  const list = sections.slice();
-  if (!list.some(s => s.name === 'default')) {
-    list.push({ name: 'default', isDefault: true });
-  }
+  // 全曲預設排第一個
+  const list = sections.filter(s => s.name !== 'default');
+  list.unshift({ name: 'default', isDefault: true });
 
   list.forEach(sec => {
     const sName = sec.name;
@@ -2127,7 +2139,8 @@ function renderSectionTabs(sections) {
     btn.className = 'sm-tab-btn' + (isCur ? ' active' : '');
 
     let title = sec.isDefault ? '全曲預設' : sName;
-    const patTag = sp && sp.patternVal && sp.patternVal !== 'custom' ? sp.patternVal : (sp && sp.patternVal === 'custom' ? '自訂' : '');
+    const patTag = !sec.isDefault && sp && sp.inherit ? '同全曲預設'
+      : sp && sp.patternVal && sp.patternVal !== 'custom' ? sp.patternVal : (sp && sp.patternVal === 'custom' ? '自訂' : '');
     if (patTag) title += ' (' + patTag + ')';
 
     btn.textContent = title;
@@ -2136,6 +2149,7 @@ function renderSectionTabs(sections) {
         ? 'background:var(--accent); color:var(--on-accent); border:1px solid var(--accent);'
         : 'background:var(--panel); color:var(--mute); border:1px solid var(--line);');
 
+    btn.dataset.tab = sName;
     btn.onclick = () => switchStrumTab(sName);
     container.appendChild(btn);
   });
@@ -2156,7 +2170,7 @@ function switchStrumTab(tabName) {
   if (container) {
     const btns = container.querySelectorAll('button');
     btns.forEach(b => {
-      const isCur = b.textContent.startsWith(tabName === 'default' ? '全曲預設' : tabName);
+      const isCur = b.dataset.tab === tabName;   // 用段落名稱比對，「主歌」不會連「主歌2」一起標成選取
       b.classList.toggle('active', isCur);
       b.style.background = isCur ? 'var(--accent)' : 'var(--panel)';
       b.style.color = isCur ? 'var(--on-accent)' : 'var(--mute)';
@@ -2725,6 +2739,8 @@ function initTxtBuilder() {
           sectionPatterns[curStrumTab].beats = p.beats;
           sectionPatterns[curStrumTab].patternVal = p.key;
           sectionPatterns[curStrumTab].auto = false;
+          if (curStrumTab === 'default') applyDefaultToAllSections();   // 全曲預設：套用到所有段落
+          else sectionPatterns[curStrumTab].inherit = false;
         }
         renderSectionTabs(getDetectedSectionsFromTxt());
         setEditorStatus('已選用 ' + ($('txtpattern').selectedOptions[0]?.text || v));
