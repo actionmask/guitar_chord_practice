@@ -1075,9 +1075,14 @@ function showNow(bar,pos){ lastPos=pos;
     nowLyEl.hidden = !curLy;
   }
 }
-let shownIdx=-2, lastLamp=-1, lampN=8;
-function buildLamps(){ const mb=score.masterBars[0], n=mb.timeSignatureDenominator===4?mb.timeSignatureNumerator*2:mb.timeSignatureNumerator; lampN=Math.max(2,Math.min(16,n));
-  const box=$('lamps'); box.innerHTML=''; for(let k=0;k<lampN;k++){const l=document.createElement('i'); l.className='lamp'+((mb.timeSignatureDenominator===4?k%2===0:true)?' beat':''); box.appendChild(l)} lastLamp=-1; }
+let shownIdx=-2, lastLamp=-1, lampN=8, lampTs='';
+// 節拍燈：依「這一小節」的拍號建燈；曲中換拍號（例如前奏 3/4、主歌 4/4）時 onTick 會重建
+function buildLamps(barIdx){ const mb=score.masterBars[barIdx||0], num=mb.timeSignatureNumerator, den=mb.timeSignatureDenominator;
+  const n=den===4?num*2:num; lampN=Math.max(2,Math.min(16,n)); lampTs=num+'/'+den;
+  // 正拍（紅點）：x/4 每一拍；6/8、9/8、12/8 每三個八分一拍；其他 x/8 只有第一下；x/2 每一拍
+  const compound=den===8&&num>3&&num%3===0;
+  const isBeat=k=>den===4?k%2===0:den===8?(compound?k%3===0:k===0):true;
+  const box=$('lamps'); box.innerHTML=''; for(let k=0;k<lampN;k++){const l=document.createElement('i'); l.className='lamp'+(isBeat(k)?' beat':''); box.appendChild(l)} lastLamp=-1; }
 function barAt(tick){ const m=score.masterBars; let lo=0,hi=m.length-1; while(lo<hi){const mid=(lo+hi+1)>>1; if(m[mid].start<=tick)lo=mid; else hi=mid-1} return lo; }
 function onTick(tick){ if(!score)return;
   // synth playback: pause just before the end so alphaTab never rewinds the cursor to bar 1 (see the Play button below)
@@ -1085,6 +1090,7 @@ function onTick(tick){ if(!score)return;
   rollNote(tick); const i=barAt(tick), mb=score.masterBars[i], frac=Math.max(0,Math.min(.9999,(tick-mb.start)/mb.calculateDuration()));
   showNow(i,tick);
   if(cells[i]){ const pg=cells[i].querySelector('.prog'); if(pg)pg.style.width=(frac*100)+'%'; }
+  if(mb.timeSignatureNumerator+'/'+mb.timeSignatureDenominator!==lampTs)buildLamps(i);   // 進到不同拍號的小節：燈號重建
   const k=Math.floor(frac*lampN); if(k!==lastLamp){ lastLamp=k; const ls=$('lamps').children; for(let j=0;j<ls.length;j++)ls[j].classList.toggle('on',j===k);
     if(playing&&ls[k]&&ls[k].classList.contains('beat')){const el=$('chord'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse')}
     const arrs=$('strumArrows')?$('strumArrows').children:[];
