@@ -3,9 +3,15 @@
 (function (root) {
   'use strict';
 
+  // 和弦性質：maj7、m7b5、m7-5、7#9、7(b9)、maj7#11、sus4、add9、aug、+、dim7、°、ø、M7、13 …
+  // -5／-9／-13 是延伸音（m7-5 = 半減七），不是把位編號；把位請寫 C(2) 或 C-2。
+  const QUALITY = '(?:maj|min|dim|aug|sus|add|m|M|\\+|°|ø|\\d|[#b♯♭](?:5|9|11|13)|-(?:5|9|13)|\\([#b♯♭]\\d+\\))*';
+  const ROOT = '[A-G][#b♯♭]?';
   // 支援和弦本體 + 把位後綴（如 C(2), C:2, C@8, C:barre, C(barre), C(封閉), C(開放)）
-  const CHORD_REGEX = /^[A-G][#b♯♭]?(?:m|maj|min|dim|aug|sus|add|\d)*(?:\/[A-G][#b♯♭]?)?(?:(?:[:\(-](?:\d+|barre|open|封閉|開放)\)?)|(?:@\d+))?$/i;
-  const CHORD_PURE = /^[A-G][#b♯♭]?(?:m|maj|min|dim|aug|sus|add|\d)*(?:\/[A-G][#b♯♭]?)?$/i;
+  const CHORD_REGEX = new RegExp('^' + ROOT + QUALITY + '(?:\\/' + ROOT + ')?(?:(?:[:\\(-](?:\\d+|barre|open|封閉|開放)\\)?)|(?:@\\d+))?$');
+  const CHORD_PURE = new RegExp('^' + ROOT + QUALITY + '(?:\\/' + ROOT + ')?$');
+  // "C+G" = 一小節兩個和弦；"C+" 本身是增和弦，所以只在 + 後面接根音時才切開
+  const splitPlus = tok => tok.split(/\+(?=[A-G])/).filter(Boolean);
   const HEADER_REGEX = /^\s*\[(.+?)\]\s*(.*)$/;
   const REPEAT_REGEX = /x(\d+)\s*$/i;
 
@@ -69,22 +75,58 @@
       }
     });
 
-    const lenToDur8 = { 1: 8, 2: 4, 3: 4, 4: 2, 6: 2, 8: 1, 12: 1, 16: 1 };
-    const lenToDur16 = { 1: 16, 2: 8, 3: 8, 4: 4, 6: 4, 8: 2, 12: 2, 16: 1 };
-    const lenToDur4 = { 1: 4, 2: 2, 3: 2, 4: 1 };
-    const lenToDur = unit === 16 ? lenToDur16 : (unit === 4 ? lenToDur4 : lenToDur8);
+    // 把「幾個 unit 長」拆成記得出來的音符（全、附點二分、二分、附點四分…），
+    // 例如 8 分音符為單位時長度 5 = 二分 + 八分（第二段用延音線接上），不會再被截短。
+    const pieces = [];
+    for (let len = unit; len >= 1; len /= 2) {
+      if (len >= 2 && Number.isInteger(len * 1.5) && len * 1.5 <= unit) pieces.push({ len: len * 1.5, dur: unit / len, dot: true });
+      pieces.push({ len, dur: unit / len, dot: false });
+    }
+    pieces.sort((a, b) => b.len - a.len);
+    const split = len => {
+      const out = [];
+      while (len > 0) {
+        const p = pieces.find(x => x.len <= len) || pieces[pieces.length - 1];
+        out.push(p);
+        len -= p.len;
+      }
+      return out;
+    };
 
-    return events.map(ev => {
+    const steps = [];
+    events.forEach(ev => {
       const t = ev.tok;
-      const dur = lenToDur[ev.len] || unit;
-      const dot = ev.len === 3 || ev.len === 6;
-      if (t === 'D' || t === 'd') return { type: 'strum', dir: 'D', dur, dot };
-      if (t === 'U' || t === 'u') return { type: 'strum', dir: 'U', dur, dot };
-      if (t === 'X' || t === 'x') return { type: 'dead', dir: 'X', dur, dot };
-      if (t === '.' || t === 'R' || t === 'r') return { type: 'rest', dur, dot };
-      if (t === 'B' || t === 'b' || /^[1-6]$/.test(t)) return { type: 'arp', str: t.toUpperCase(), dur, dot };
-      return { type: mode === 'arp' ? 'arp' : 'strum', dir: 'D', str: 'B', dur, dot };
+      let base;
+      if (t === 'D' || t === 'd') base = { type: 'strum', dir: 'D' };
+      else if (t === 'U' || t === 'u') base = { type: 'strum', dir: 'U' };
+      else if (t === 'X' || t === 'x') base = { type: 'dead', dir: 'X' };
+      else if (t === '.' || t === 'R' || t === 'r') base = { type: 'rest' };
+      else if (t === 'B' || t === 'b' || /^[1-6]$/.test(t)) base = { type: 'arp', str: t.toUpperCase() };
+      else base = { type: mode === 'arp' ? 'arp' : 'strum', dir: 'D', str: 'B' };
+      split(ev.len).forEach((p, k) => {
+        // 第二段以後：刷弦／分解的音用延音線接著響；切音和休止就是休止
+        const cont = k > 0 && (base.type === 'strum' || base.type === 'arp');
+        const st = Object.assign({}, k > 0 && !cont ? { type: 'rest' } : base, { dur: p.dur, dot: p.dot });
+        if (cont) st.tie = true;
+        steps.push(st);
+      });
     });
+    return steps;
+  }
+
+  // 拍號換算成「幾個四分音符」：4/4 = 4、3/4 = 3、6/8 = 3
+  function tsQuarters(ts) {
+    return ts && ts[0] && ts[1] ? ts[0] * 4 / ts[1] : 4;
+  }
+
+  // 刷法長度和小節長度不合時：短的從頭循環補滿、長的截掉，並回報給使用者
+  function fitTokens(tokens, barUnits) {
+    if (!tokens.length || tokens.length === barUnits) return tokens.slice();
+    const out = [];
+    for (let i = 0; i < barUnits; i++) out.push(tokens[i % tokens.length]);
+    // 循環接回開頭時，開頭若是延音記號就變成重新刷一次，避免延音接到不相干的位置
+    if (tokens.length < barUnits && out[tokens.length] === '-') out[tokens.length] = tokens.find(t => t !== '-' && t !== '.') || '.';
+    return out;
   }
 
   // 建立 pattern 物件
@@ -96,7 +138,7 @@
     const steps = parsePatternTokens(tokens, mode, unit);
     const mid = Math.floor(tokens.length / 2);
     const halfSteps = parsePatternTokens(tokens.slice(0, mid), mode, unit);
-    const strums = steps.map(st => {
+    const strums = steps.filter(st => !st.tie).map(st => {
       if (st.type === 'dead') return { stroke: 'mute' };
       if (st.type === 'rest') return { stroke: 'rest' };
       if (st.dir === 'D') return { stroke: 'down' };
@@ -181,6 +223,13 @@
   PATTERNS['waltz_classic'] = PATTERNS.waltz;
   PATTERNS['arp_t123'] = PATTERNS.arp4;
 
+  // 各拍號沒指定刷法時的預設（主歌用 strum、副歌用 chorus）
+  const TS_DEFAULT_PATTERNS = {
+    '4/4': { strum: 'folk', chorus: 'pop8' },
+    '3/4': { strum: 'waltz_folk', chorus: 'waltz_pop' },
+    '6/8': { strum: 'folk_68', chorus: 'slow_rock_68' }
+  };
+
   const PATTERNS_ALIAS = {
     '民謠': 'folk', '抒情': 'folk', 'old_faithful': 'folk',
     '流行': 'pop8', '八拍': 'pop8', 'pop': 'pop8',
@@ -240,8 +289,10 @@
       s = s.slice(0, modeMatch.index).trim();
     }
 
+    // C(2)、C-2 是把位；但 m7-5、7-9、7-13 這種「數字後面的 -5/-9/-13」是延伸音，不能吃掉
     const idxMatch = /[\(-](\d+)[\)]?$/.exec(s);
-    if (idxMatch) {
+    const isExtension = idxMatch && idxMatch[0][0] === '-' && /^(5|9|13)$/.test(idxMatch[1]) && /\d$/.test(s.slice(0, idxMatch.index));
+    if (idxMatch && !isExtension) {
       voicingIdx = parseInt(idxMatch[1], 10);
       s = s.slice(0, idxMatch.index).trim();
     }
@@ -298,23 +349,47 @@
     return 6;
   }
 
-  // 切割歌詞（依據和弦所在欄位）
+  // 等寬字型裡的顯示寬度：中日韓文字、全形符號、全形空白佔兩格
+  function charWidth(ch) {
+    const c = ch.codePointAt(0);
+    if (c < 0x1100) return 1;
+    if ((c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF && c !== 0x303F) || (c >= 0xAC00 && c <= 0xD7A3) ||
+      (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE30 && c <= 0xFE4F) || (c >= 0xFF00 && c <= 0xFF60) ||
+      (c >= 0xFFE0 && c <= 0xFFE6) || c >= 0x1F300) return 2;
+    return 1;
+  }
+  function displayWidth(s) {
+    let w = 0;
+    for (const ch of s) w += charWidth(ch);
+    return w;
+  }
+
+  // 切割歌詞（依據和弦所在的「顯示欄位」）。
+  // 中文歌詞通常沒有空白：和弦正下方那個字就是這個和弦的第一個字。
+  // 英文歌詞：切點落在單字中間時，往後移到單字結尾（和弦標在音節上，不切斷單字）。
   function splitLyric(lyric, cols) {
+    const chars = Array.from(lyric);
+    const starts = [];
+    let w = 0;
+    for (const ch of chars) { starts.push(w); w += charWidth(ch); }
+    const isWord = ch => /[A-Za-z0-9'’]/.test(ch || '');
     const cuts = [];
-    for (let c of cols) {
-      c = Math.min(c, lyric.length);
-      while (c > 0 && c < lyric.length && lyric[c - 1] !== ' ' && lyric[c] !== ' ') {
-        c++;
-      }
+    for (const col of cols) {
+      // 第一個「涵蓋或超過這個欄位」的字
+      let c = chars.findIndex((ch, i) => starts[i] + charWidth(ch) > col);
+      if (c < 0) c = chars.length;
+      while (c > 0 && c < chars.length && isWord(chars[c - 1]) && isWord(chars[c])) c++;
+      if (cuts.length && c < cuts[cuts.length - 1]) c = cuts[cuts.length - 1];
       cuts.push(c);
     }
-    const lead = lyric.slice(0, cuts[0]).trim();
+    const slice = (a, b) => chars.slice(a, b).join('');
+    const lead = slice(0, cuts[0]).trim();
     const parts = [];
     for (let j = 0; j < cuts.length; j++) {
-      const nextC = j + 1 < cuts.length ? cuts[j + 1] : lyric.length;
-      parts.push(lyric.slice(cuts[j], nextC).trim());
+      const nextC = j + 1 < cuts.length ? cuts[j + 1] : chars.length;
+      parts.push(slice(cuts[j], nextC).trim());
     }
-    return { lead, parts };
+    return { lead, parts, cuts };
   }
 
   // 檢查是否為和弦行
@@ -330,10 +405,12 @@
     if (!tokens.length) return false;
 
     let chordCount = 0;
+    const hasBar = s.includes('|');
     for (const tok of tokens) {
-      // 處理 |G D| 或 G+D
-      const parts = tok.replace(/^[|]+|[|]+$/g, '').split('+').filter(Boolean);
+      // 處理 |G D| 或 G+D；|C . . G| 裡的 . 或 - 是「這一拍不換和弦」的佔位
+      const parts = splitPlus(tok.replace(/^[|]+|[|]+$/g, ''));
       for (const p of parts) {
+        if (hasBar && /^[.\-]$/.test(p)) continue;
         const clean = p.replace(/:\d+$/, '');
         if (CHORD_REGEX.test(clean) || DEFAULT_SHAPES[clean] || (root.CHORDS && root.CHORDS[clean + '|major'])) {
           chordCount++;
@@ -346,6 +423,7 @@
   }
 
   // 解析和弦行中的各組和弦 [(col, [chords], bars)]
+  // start／end 是這組和弦在這一行裡的字元範圍，回寫和弦（setBarChords）時用來替換
   function parseChordLine(line) {
     const groups = [];
     let inBar = false;
@@ -354,37 +432,50 @@
     let match;
     while ((match = regex.exec(line)) !== null) {
       const tok = match[0];
-      const col = match.index;
+      const col = displayWidth(line.slice(0, match.index));
       if (tok === '|') {
         inBar = !inBar;
         if (inBar) {
-          groups.push({ col: col + 1, chords: [], bars: 1, isBarGroup: true });
+          groups.push({ col: col + 1, chords: [], pos: [], slots: 0, bars: 1, isBarGroup: true, start: match.index, end: line.length });
+        } else if (groups.length && groups[groups.length - 1].isBarGroup) {
+          groups[groups.length - 1].end = match.index + 1;
         }
         continue;
       }
       if (REPEAT_REGEX.test(tok)) continue;
+      // |C . . G|：佔位符號只佔一拍，不是和弦
+      if (inBar && /^[.\-]$/.test(tok) && groups.length && groups[groups.length - 1].isBarGroup) {
+        groups[groups.length - 1].slots++;
+        continue;
+      }
 
       let name = tok;
       let bars = 1;
-      const colonIdx = name.indexOf(':');
-      if (colonIdx > 0) {
-        const num = parseInt(name.slice(colonIdx + 1), 10);
-        if (!isNaN(num) && num > 0) bars = num;
-        name = name.slice(0, colonIdx);
+      // "C:2" = C 彈兩小節；"C:barre" 是把位偏好，要原樣留給 parseChordVoicingSpec
+      const barsMatch = /:(\d+)$/.exec(name);
+      if (barsMatch) {
+        const num = parseInt(barsMatch[1], 10);
+        if (num > 0) bars = num;
+        name = name.slice(0, barsMatch.index);
       }
-      const chords = name.split('+').map(normalizeChord).filter(Boolean);
+      const chords = splitPlus(name).map(normalizeChord).filter(Boolean);
       if (!chords.length) continue;
 
       if (inBar && groups.length && groups[groups.length - 1].isBarGroup) {
-        if (!groups[groups.length - 1].chords.length) {
-          groups[groups.length - 1].col = col;
+        const g = groups[groups.length - 1];
+        if (!g.chords.length) {
+          g.col = col;
         }
-        groups[groups.length - 1].chords.push(...chords);
+        chords.forEach(c => { g.chords.push(c); g.pos.push(g.slots); g.slots++; });
       } else {
-        groups.push({ col, chords, bars, isBarGroup: false });
+        groups.push({ col, chords, bars, isBarGroup: false, start: match.index, end: match.index + tok.length });
       }
     }
-    return groups;
+    // 小節群組裡每個和弦在小節中的位置（0～1）；沒有佔位符號時就是平均分配
+    groups.forEach(g => {
+      if (g.isBarGroup && g.slots > 0) g.chordPos = g.pos.map(p => p / g.slots);
+    });
+    return groups.filter(g => g.chords.length);
   }
 
   // 解析整個 txt 文字檔
@@ -411,6 +502,8 @@
     let i = 0;
     while (i < lines.length) {
       let rawLine = lines[i];
+      const lineIdx = i;      // 這一行在原文的行號（回寫和弦用）
+      let lineOffset = 0;     // 和弦從這一行第幾個字元開始（[Intro] Am C 這種同一行的寫法不是 0）
       i++;
       const trimmed = rawLine.trim();
       if (!trimmed || trimmed.startsWith('#') || (trimmed.startsWith('(') && trimmed.endsWith(')'))) {
@@ -429,7 +522,10 @@
           if (num > 30 && num < 300) meta.tempo = num;
         } else if (key === 'ts' || key === '拍號') {
           const p = val.split('/');
-          if (p.length === 2) meta.ts = [parseInt(p[0], 10) || 4, parseInt(p[1], 10) || 4];
+          if (p.length === 2) {
+            meta.ts = [parseInt(p[0], 10) || 4, parseInt(p[1], 10) || 4];
+            meta.tsExplicit = true;
+          }
         }
         continue;
       }
@@ -453,7 +549,8 @@
         const remain = headerMatch[2].trim();
         if (!remain) continue;
         // 同一行後面還有和弦
-        rawLine = remain;
+        lineOffset = rawLine.length - headerMatch[2].length;
+        rawLine = headerMatch[2].replace(/\s+$/, '');
       }
 
       // 和弦行
@@ -464,7 +561,8 @@
         let chordLineBody = lineContent;
         if (repMatch) {
           rep = parseInt(repMatch[1], 10) || 1;
-          chordLineBody = lineContent.slice(0, repMatch.index).trim();
+          // 只去掉結尾空白：開頭的空白決定和弦對齊歌詞的欄位，不能刪
+          chordLineBody = lineContent.slice(0, repMatch.index).replace(/\s+$/, '');
         }
 
         const groups = parseChordLine(chordLineBody);
@@ -472,20 +570,25 @@
 
         // 檢查下一行是否為歌詞
         let lyricLine = '';
+        let lyricIdx = -1;
         if (i < lines.length) {
           const nextLine = lines[i];
           const nTrim = nextLine.trim();
           if (nTrim && !HEADER_REGEX.test(nextLine) && !isChordLine(nextLine) &&
             !nTrim.startsWith('#') && !(nTrim.startsWith('(') && nTrim.endsWith(')'))) {
             lyricLine = nextLine;
+            lyricIdx = i;
             i++;
           }
         }
+        let lyricCuts = null;
 
         // 依據欄位將歌詞切給各和弦
         let lead = '';
         let parts = [];
-        const isCompact = groups.length > 1 && groups.every((g, idx) => idx === 0 || g.col - groups[idx - 1].col <= 4);
+        // 簡寫和弦（"C G Am F" 擠在一起，下面整句歌詞）：和弦間距很小，而且歌詞遠比和弦行長
+        const isCompact = groups.length > 1 && groups.every((g, idx) => idx === 0 || g.col - groups[idx - 1].col <= 4) &&
+          displayWidth(lyricLine.trim()) > 2 * (groups[groups.length - 1].col + 4);
         if (!lyricLine.trim()) {
           parts = new Array(groups.length).fill('');
         } else if (isCompact) {
@@ -495,12 +598,15 @@
           const res = splitLyric(lyricLine, groups.map(g => g.col));
           lead = res.lead;
           parts = res.parts;
+          lyricCuts = res.cuts;
         }
 
         const sec = getCurSection();
-        // 弱起歌詞接在前一小節
+        // 弱起歌詞接在前一小節；段落的第一句沒有前一小節，就併進這一行第一個和弦，不要丟掉
         if (lead && sec.bars.length) {
           sec.bars[sec.bars.length - 1].text = (sec.bars[sec.bars.length - 1].text + ' ' + lead).trim();
+        } else if (lead) {
+          parts[0] = (lead + ' ' + (parts[0] || '')).trim();
         }
 
         // 依據重複次數展開小節
@@ -510,7 +616,14 @@
             for (let b = 0; b < g.bars; b++) {
               sec.bars.push({
                 chords: g.chords,
-                text: b === 0 ? lyricText : ''
+                chordPos: g.chordPos || null,
+                text: b === 0 ? lyricText : '',
+                // 這個小節寫在原文哪裡：回寫和弦（setBarChords）時用
+                src: {
+                  line: lineIdx, offset: lineOffset, start: g.start, end: g.end, group: idx,
+                  reps: rep, rep: r, subs: g.bars, sub: b,
+                  lyricLine: lyricIdx, cuts: lyricCuts
+                }
               });
             }
           });
@@ -552,8 +665,9 @@
     }
 
     if (step.type === 'strum') {
-      if (step.dir === 'D') fx.push('sd');
-      else if (step.dir === 'U') fx.push('su');
+      // 延音接續（tie）只是讓前一下繼續響，不是新的一刷，所以不標上下刷方向
+      if (!step.tie && step.dir === 'D') fx.push('sd');
+      else if (!step.tie && step.dir === 'U') fx.push('su');
 
       // 產生所有品格 >= 0 的音符
       const notes = [];
@@ -562,7 +676,7 @@
       for (let s = lo; s < hi; s++) {
         const fret = highFrets[s];
         if (fret >= 0) {
-          notes.push(fret + '.' + (s + 1));
+          notes.push((step.tie ? '-' : fret) + '.' + (s + 1));
         }
       }
       if (!notes.length) return 'r.' + dur + (fx.length ? '{' + fx.join(' ') + '}' : '');
@@ -602,7 +716,7 @@
         }
       }
       if (fret < 0) return 'r.' + dur + (fx.length ? '{' + fx.join(' ') + '}' : '');
-      return fret + '.' + sNum + '.' + dur + (fx.length ? '{' + fx.join(' ') + '}' : '');
+      return (step.tie ? '-' : fret) + '.' + sNum + '.' + dur + (fx.length ? '{' + fx.join(' ') + '}' : '');
     }
 
     return 'r.' + dur + (fx.length ? '{' + fx.join(' ') + '}' : '');
@@ -626,7 +740,7 @@
     } else if (bar.chords && bar.chords.length) {
       chordItems = bar.chords.map((c, i) => ({
         name: c,
-        posFrac: i / bar.chords.length
+        posFrac: bar.chordPos ? bar.chordPos[i] : i / bar.chords.length
       }));
     }
 
@@ -644,7 +758,23 @@
     // 依據時間位置（posFrac）精確分配小節 steps，確保小節時值絕對不超拍，且各和弦與品位正確切換！
     chordItems.sort((a, b) => a.posFrac - b.posFrac);
 
-    const steps = pattern.steps;
+    // 換和弦的那一格如果正好是延音（-），改成重新刷／彈一次，否則後面的和弦根本不會響
+    let steps = pattern.steps;
+    if (pattern.rawTokens && pattern.rawTokens.length) {
+      const toks = pattern.rawTokens.slice();
+      let changed = false;
+      chordItems.forEach(item => {
+        const k = Math.round(item.posFrac * toks.length);
+        if (k <= 0 || k >= toks.length || toks[k] !== '-') return;
+        let j = k - 1;
+        while (j > 0 && toks[j] === '-') j--;
+        const held = toks[j];
+        if (held === '.' || held === 'X' || held === 'x') return;   // 休止、切音不用補
+        toks[k] = /^[1-6Bb]$/.test(held) ? held : 'D';
+        changed = true;
+      });
+      if (changed) steps = parsePatternTokens(toks, pattern.mode, pattern.unit || 8);
+    }
     let totalQuarterBeats = 0;
     steps.forEach(st => { totalQuarterBeats += stepDurationInQuarters(st); });
     if (totalQuarterBeats <= 0) totalQuarterBeats = 4;
@@ -664,6 +794,8 @@
 
       const isFirstOfThisChord = (matchedChord !== lastChordName);
       lastChordName = matchedChord;
+      // 延音線不能接到另一個和弦：換和弦的那一拍改成重新刷／彈
+      if (st.tie && isFirstOfThisChord) st = Object.assign({}, st, { tie: false });
       const frets = getChordFrets(matchedChord, customShapes);
       const txt = (idx === 0) ? barText : '';
 
@@ -679,22 +811,31 @@
     opts = opts || {};
     const meta = song.meta;
     const title = opts.title || meta.title || '自訂和弦譜';
-    const artist = opts.artist || meta.artist || '';
+    // 歌手可以留空：呼叫端明確傳入 artist（包含空字串）時就照用，不再拿 txt 裡的 Artist: 補回去
+    const artist = typeof opts.artist === 'string' ? opts.artist : (meta.artist || '');
     const tempo = opts.tempo || meta.tempo || 100;
 
     // 支援傳入單一 pattern 或多段落 patterns: { default, verse, chorus }
     const patternsMap = (typeof opts.patterns === 'object' && opts.patterns !== null) ? opts.patterns : {};
-    const defaultPatKey = opts.pattern || patternsMap.default || 'folk';
-    const defaultPattern = (typeof defaultPatKey === 'object' && defaultPatKey !== null) ? defaultPatKey : (PATTERNS[defaultPatKey] || PATTERNS['folk']);
     const customShapes = opts.shapes || {};
-    const ts = opts.ts || defaultPattern.ts || [4, 4];
+    const warnings = [];
+    const warn = msg => { if (!warnings.includes(msg)) warnings.push(msg); };
 
-    function resolveSectionPattern(p) {
-      return resolvePattern(p, defaultPattern);
-    }
+    // txt 開頭寫了 TS: 3/4 之類的拍號時，沒指定刷法的段落改用該拍號的預設刷法
+    const tsKey = t => t[0] + '/' + t[1];
+    const headerTs = meta.tsExplicit ? meta.ts : null;
+    const tsDefaults = TS_DEFAULT_PATTERNS[headerTs ? tsKey(headerTs) : '4/4'];
+    if (headerTs && !tsDefaults) warn('拍號 ' + tsKey(headerTs) + ' 沒有內建刷法，請在段落標籤指定刷法，例如 [Verse:D-DU-UDU]。');
+    const autoPattern = kind => {
+      if (headerTs && !tsDefaults) return Object.assign({}, PATTERNS.folk, { ts: headerTs });
+      return PATTERNS[(tsDefaults || TS_DEFAULT_PATTERNS['4/4'])[kind]];
+    };
+    // 全曲預設：呼叫端傳的 default 若和 TS: 拍號不合，視為沒指定（介面的預設值是 4/4 民謠）
+    const weakDefault = resolvePattern(patternsMap.default || opts.pattern || null, null);
+    const fallbackPattern = (weakDefault && !(headerTs && tsKey(weakDefault.ts) !== tsKey(headerTs))) ? weakDefault : autoPattern('strum');
 
     function resolvePatternForSection(sec) {
-      if (!sec) return defaultPattern;
+      if (!sec) return fallbackPattern;
       const sName = (sec.name || '').toLowerCase();
       // 1. 優先採用指定段落名稱的刷法 (patternsMap 或 UI 自訂)
       if (sec.name && (patternsMap[sec.name] || patternsMap[sName])) {
@@ -702,21 +843,41 @@
       }
       // 2. 段落標籤文字中標註的刷法（如 [Intro:arp4]、[Verse:folk] 或 [Chorus:DXUXDXUX]）
       if (sec.pattern) {
-        const rp = resolvePattern(sec.pattern);
+        const rp = resolvePattern(sec.pattern, null);
         if (rp) return rp;
+        warn('看不懂「' + sec.name + '」的刷法「' + sec.pattern + '」，改用預設刷法。');
       }
-      // 3. 依段落名稱自動配對主歌 vs 副歌
+      // 3. 依段落名稱自動配對主歌 vs 副歌（依拍號挑預設）
       if (/chorus|副歌|高潮/.test(sName)) {
         if (patternsMap.chorus) return resolvePattern(patternsMap.chorus);
-        if (PATTERNS['pop8']) return PATTERNS['pop8'];
+        return autoPattern('chorus');
       }
       if (/verse|主歌|段落|a段|b段/.test(sName)) {
         if (patternsMap.verse) return resolvePattern(patternsMap.verse);
-        if (PATTERNS['folk']) return PATTERNS['folk'];
+        return autoPattern('strum');
       }
-      if (patternsMap[sName]) return resolvePattern(patternsMap[sName]);
-      return patternsMap.default ? resolvePattern(patternsMap.default) : defaultPattern;
+      return fallbackPattern;
     }
+
+    // 每個段落的拍號跟著它的刷法走；刷法長度和小節不合時自動補滿／截斷並提醒
+    const fitCache = new Map();
+    function fitPatternToBar(pat, secName) {
+      if (fitCache.has(pat)) return fitCache.get(pat);
+      const ts = pat.ts || [4, 4];
+      const unit = pat.unit || 8;
+      const barUnits = Math.round(tsQuarters(ts) * unit / 4);
+      let fitted = pat;
+      if (pat.rawTokens && pat.rawTokens.length && pat.rawTokens.length !== barUnits) {
+        const toks = fitTokens(pat.rawTokens, barUnits);
+        fitted = Object.assign({}, pat, { rawTokens: toks, steps: parsePatternTokens(toks, pat.mode, unit) });
+        warn('「' + (secName || pat.name) + '」的刷法有 ' + pat.rawTokens.length + ' 格，' + tsKey(ts) + ' 一小節要 ' + barUnits + ' 格，已' +
+          (pat.rawTokens.length < barUnits ? '從頭循環補滿' : '截掉多出來的部分') + '。');
+      }
+      fitCache.set(pat, fitted);
+      return fitted;
+    }
+    const firstPat = song.sections.length ? resolvePatternForSection(song.sections[0]) : fallbackPattern;
+    const ts = opts.ts || firstPat.ts || [4, 4];
 
     // 收集所有出現過的和弦（包含文字譜原始和弦以及使用者自訂的小節和弦）
     const chordSet = new Set();
@@ -769,9 +930,15 @@
 
     const lyricsMap = {};
     let totalBars = 0;
+    let curTs = tsKey(ts);
     song.sections.forEach(sec => {
       let isFirstInSec = true;
-      const secPattern = resolvePatternForSection(sec);
+      const rawPattern = resolvePatternForSection(sec);
+      const secTs = rawPattern.ts || [4, 4];
+      if (headerTs && tsKey(secTs) !== tsKey(headerTs)) {
+        warn('「' + (sec.name || '未命名段落') + '」的刷法是 ' + tsKey(secTs) + '，和開頭的 TS: ' + tsKey(headerTs) + ' 不同，這段用 ' + tsKey(secTs) + '。');
+      }
+      const secPattern = fitPatternToBar(rawPattern, sec.name);
       sec.bars.forEach(b => {
         totalBars++;
         const barIdx = totalBars - 1;
@@ -780,8 +947,13 @@
         let barTex = renderBar(b, secPattern, customShapes, customBarChords);
         if (isFirstInSec && sec.name) {
           barTex = '\\section "' + esc(sec.name) + '" ' + barTex;
-          isFirstInSec = false;
         }
+        // 拍號在段落之間改變時（例如前奏 3/4、主歌 4/4），在這一段第一小節前面標上新拍號
+        if (isFirstInSec && tsKey(secTs) !== curTs) {
+          barTex = '\\ts ' + secTs[0] + ' ' + secTs[1] + ' ' + barTex;
+          curTs = tsKey(secTs);
+        }
+        isFirstInSec = false;
         lines.push(barTex + ' |  // ' + totalBars);
       });
     });
@@ -799,8 +971,109 @@
       tempo,
       totalBars,
       chordCount: chordSet.size,
-      lyrics: lyricsMap
+      lyrics: lyricsMap,
+      warnings
     };
+  }
+
+  // ---------- 把和弦編輯器的修改寫回 txt ----------
+  // 和弦編輯器以前把改過的和弦另外記在「全曲第幾小節」，txt 一多一行就全部錯位，存下來的 txt 也不會變。
+  // 現在直接改 txt 本身：txt 是唯一的資料來源，看得到、改得動、存得下來。
+
+  function allBars(txt) {
+    return parseSongTxt(txt).sections.reduce((a, s) => a.concat(s.bars), []);
+  }
+
+  // 讀出第 barIndex 小節（0 起算）目前的和弦：[{ name, posFrac }]
+  function getBarChords(txt, barIndex) {
+    const bar = allBars(txt)[barIndex];
+    if (!bar) return null;
+    return bar.chords.map((c, i) => ({ name: c, posFrac: bar.chordPos ? bar.chordPos[i] : i / bar.chords.length }));
+  }
+
+  // [{name, posFrac}] → txt 寫法：一個和弦 "C"、平均分配 "C+G"、其他位置用拍點 "|C . . G|"
+  function formatBarChords(list) {
+    const items = list.filter(c => c && c.name).map(c => ({ name: String(c.name).trim(), pos: +c.posFrac || 0 }))
+      .sort((a, b) => a.pos - b.pos);
+    if (!items.length) return '';
+    const even = items.every((c, i) => Math.abs(c.pos - i / items.length) < 0.001);
+    if (even) return items.map(c => c.name).join('+');
+    const n = [2, 3, 4, 6, 8, 12, 16].find(k => items.every(c => Math.abs(c.pos * k - Math.round(c.pos * k)) < 0.001)) || 16;
+    const slots = new Array(n).fill('.');
+    items.forEach(c => { slots[Math.min(n - 1, Math.round(c.pos * n))] = c.name; });
+    return '|' + slots.join(' ') + '|';
+  }
+
+  // 把 lines[s.line] 裡這個小節的那段文字換成 text。
+  // 後面的和弦盡量留在原來的欄位（吃掉後面多的空白或補空白）；真的放不下時，
+  // 在歌詞行對應的切點補同樣寬度的空白，讓後面的和弦和歌詞仍然對得齊。
+  function replaceSpan(lines, s, text) {
+    const line = lines[s.line];
+    const a = s.offset + s.start, b = s.offset + s.end;
+    const before = line.slice(0, a), after = line.slice(b);
+    const delta = displayWidth(text) - displayWidth(line.slice(a, b));
+    let rest = after;
+    let shift = 0;
+    if (delta > 0) {
+      const spaces = /^ */.exec(after)[0].length;
+      const atEnd = !after.trim();
+      const canEat = atEnd ? spaces : Math.max(0, spaces - 1);   // 和下一個和弦之間至少留一格
+      const eat = Math.min(canEat, delta);
+      rest = after.slice(eat);
+      shift = delta - eat;
+      if (shift && !atEnd && !/^ /.test(rest)) rest = ' ' + rest, shift++;
+    } else if (delta < 0 && after.trim()) {
+      rest = ' '.repeat(-delta) + after;
+    }
+    lines[s.line] = (before + text + rest).replace(/\s+$/, '');
+    // 後面的和弦被往右推了：歌詞行在下一個和弦的切點補空白
+    if (shift > 0 && s.lyricLine >= 0 && s.cuts && s.cuts[s.group + 1] !== undefined) {
+      const chars = Array.from(lines[s.lyricLine]);
+      chars.splice(s.cuts[s.group + 1], 0, ' '.repeat(shift));
+      lines[s.lyricLine] = chars.join('');
+    }
+  }
+
+  // 和弦行有 x2 重複時，先展開成兩行，才能只改其中一次
+  function unrollRepeat(lines, s) {
+    const line = lines[s.line];
+    const m = REPEAT_REGEX.exec(line);
+    if (!m) return false;
+    const first = line.slice(0, m.index).replace(/\s+$/, '');
+    const body = first.slice(s.offset);
+    const copies = [];
+    for (let r = 1; r < s.reps; r++) copies.push(body);
+    lines[s.line] = first;
+    const insertAt = (s.lyricLine >= 0 ? s.lyricLine : s.line) + 1;
+    lines.splice(insertAt, 0, ...copies);
+    return true;
+  }
+
+  // "C:2"（一個和弦彈兩小節）先拆成 "C C"，才能只改其中一小節
+  function splitMultiBar(lines, s) {
+    const tok = lines[s.line].slice(s.offset + s.start, s.offset + s.end);
+    const name = tok.replace(/:\d+$/, '');
+    replaceSpan(lines, s, new Array(s.subs).fill(name).join(' '));
+    return true;
+  }
+
+  // 把第 barIndex 小節（0 起算，和 buildAlphaTex 的小節編號相同）的和弦改成 list，回傳新的 txt。
+  // 找不到這個小節或 list 是空的就回傳 null（不改）。
+  function setBarChords(txt, barIndex, list) {
+    const text = formatBarChords(list || []);
+    if (!text) return null;
+    const eol = /\r\n/.test(txt) ? '\r\n' : '\n';
+    let lines = txt.replace(/\r\n?/g, '\n').split('\n');
+    for (let guard = 0; guard < 4; guard++) {
+      const bar = allBars(lines.join('\n'))[barIndex];
+      if (!bar || !bar.src) return null;
+      const s = bar.src;
+      if (s.reps > 1) { if (!unrollRepeat(lines, s)) return null; continue; }
+      if (s.subs > 1) { splitMultiBar(lines, s); continue; }
+      replaceSpan(lines, s, text);
+      return lines.join(eol);
+    }
+    return null;
   }
 
   // 主入口：將 txt 轉為 alphaTex 與 .gp 檔案
@@ -851,7 +1124,12 @@
     parseChordVoicingSpec,
     parsePatternTokens,
     createPatternFromTokens,
-    createPatternFromString
+    createPatternFromString,
+    TS_DEFAULT_PATTERNS,
+    displayWidth,
+    getBarChords,
+    setBarChords,
+    formatBarChords
   };
 
   if (typeof module !== 'undefined' && module.exports) {

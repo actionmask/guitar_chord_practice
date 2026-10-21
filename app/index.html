@@ -456,7 +456,7 @@ body.roll .sheet{width:max-content;min-width:100%}
       <!-- 分頁 1: 文字譜 / 刷法 -->
       <div id="ep_view_txt" class="ep-tab-view">
         <div class="ep-actions-row">
-          <button type="button" class="ep-btn-sm" id="txtdemo" title="填入晴天 (A小調五聲音階) 和弦譜範例">填入範例 (晴天)</button>
+          <button type="button" class="ep-btn-sm" id="txtdemo" title="填入 A 小調五聲音階練習的和弦譜範例">填入範例</button>
           <label class="filebtn ep-btn-sm" style="display:inline-flex;align-items:center;cursor:pointer;">
             匯入 .txt<input type="file" id="txtfile" accept=".txt,text/plain" style="display:none;">
           </label>
@@ -470,11 +470,11 @@ body.roll .sheet{width:max-content;min-width:100%}
         <div class="ep-meta-grid">
           <label class="ep-field">
             <span>歌曲名稱</span>
-            <input type="text" id="txttitle" placeholder="例如：晴天 (A小調五聲音階)" value="晴天 (A小調五聲音階)">
+            <input type="text" id="txttitle" placeholder="例如：A 小調五聲音階練習" value="">
           </label>
           <label class="ep-field">
             <span>歌手／演出者</span>
-            <input type="text" id="txtartist" placeholder="例如：周杰倫" value="周杰倫">
+            <input type="text" id="txtartist" placeholder="可留空" value="">
           </label>
           <label class="ep-field">
             <span>BPM</span>
@@ -572,6 +572,7 @@ G           D
                     <option value="8" selected>8 拍 (4/4)</option>
                     <option value="6">6 拍 (3/4)</option>
                     <option value="16">16 拍 (4/4)</option>
+                    <option value="12">12 拍 (6/8)</option>
                   </select>
                 </label>
               </div>
@@ -770,10 +771,12 @@ G           D
 <script src="soundfont.js?v=70"></script>
 <script src="chords.js?v=70"></script>
 <script src="pdfgp.js?v=70"></script>
-<script src="txt2gp.js?v=85"></script>
+<script src="txt2gp.js?v=89"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
+// 歌詞、和弦名稱、指型名稱都可能來自匯入的 txt／json／zip，放進 innerHTML 或屬性前一律跳脫
+const escHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // 合成 louder: the synth came out about 10 dB under a mastered MP3 (track volumes, dynamics, headroom).
 // Its output goes through a slow automatic gain (aims for MP3-like loudness) and a limiter so peaks never clip.
 let synthOut=null;   // 總音量 for 合成 sits after the automatic gain, so the two don't fight
@@ -841,11 +844,12 @@ api.scoreLoaded.on(s=>{ score=s; track=0; stretchEmptyBars(s); staffFlags();
   initMix(s); vis=[Math.max(0,g)]; if(g>0){track=g;sel.value=g;api.renderTracks([s.tracks[g]])}
   buildMap(); applyMixer(); buildMixer();
   SP=null; try{spUI()}catch(e){} $('la').value=1; $('lb').value=s.masterBars.length; $('loop').setAttribute('aria-pressed','false'); applyLoop(); $('bpm').value=s.tempo||120; $('syncbar').max=$('startbar').max=s.masterBars.length; $('startbar').value=firstNoteBar(s); $('delay').value='0.00'; $('syncbar').value=$('startbar').value; readStart();
+  // 換歌時編輯器跟著換：歌單裡的歌還原它自己的文字譜／和弦／刷法，直接開的譜檔就清空，
+  // 不能沿用上一首的（文字譜編輯器自己重新產生的譜例外，那是同一首歌的更新）
+  scoreIsTxt = txtLoadPending || !!(pendingSong && pendingSong.scoreText);
+  if(txtLoadPending) txtLoadPending=false; else resetEditorState(pendingSong, s);
   if(pendingSong){ const ps=pendingSong; pendingSong=null;
-    if(ps.customChords) songCustomChords = JSON.parse(JSON.stringify(ps.customChords)); else songCustomChords = {};
     if(ps.customVoicings) customVoicings = Object.assign({}, customVoicings, ps.customVoicings);
-    if(ps.strumPatterns) songStrumPatterns = Object.assign({}, DEFAULT_STRUM_CONFIG, ps.strumPatterns);
-    if(ps.scoreText && $('txtin')) { $('txtin').value = ps.scoreText; syncSectionsFromTxt(); }
     if(ps.ytId){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|yt:'+ps.ytId,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); const sel=ps.src==='yt'||!ps.mp3; setTimeout(()=>{ if(sel)loadingSong=true; loadYT(ps.ytId,sel) },0) }
     if(ps.mp3&&ps.src==='yt'&&ps.ytId){ setTimeout(()=>setMp3(new Uint8Array(ps.mp3.slice(0)),ps.mp3Name,false),0) }
     else if(ps.mp3){ if(isFinite(ps.delay)&&ps.bpm)store.set('gp:sync:'+(s.title||'')+'|'+ps.mp3Name,JSON.stringify({start:ps.start,delay:ps.delay,bpm:ps.bpm,sp:ps.sp})); loadingSong=true; setTimeout(()=>setMp3(new Uint8Array(ps.mp3.slice(0)),ps.mp3Name),0) }
@@ -856,6 +860,8 @@ api.scoreLoaded.on(s=>{ score=s; track=0; stretchEmptyBars(s); staffFlags();
 api.playerStateChanged.on(e=>{playing=e.state===alphaTab.synth.PlayerState.Playing;$('play').textContent=playing?'暫停':'播放'; $('play').classList.toggle('on',playing); $('play').setAttribute('aria-label',playing?'暫停':'播放');wake(playing)});
 // Now-playing strip: chord names and section markers come straight from the score file or user edits.
 let chords=[], secs=[], songCustomChords={}, customVoicings={}, barLyrics={}, songBarLyrics={};
+let txtLoadPending=false;   // true = 接下來載入的譜是文字譜編輯器剛產生的（同一首歌），不要重設編輯器
+let scoreIsTxt=false;       // 目前的譜是不是從文字譜產生的；不是的話（.gp／PDF），改和弦不能拿文字框重新產生譜
 try{ const sv=store.get('gp:custom_voicings',''); if(sv)customVoicings=JSON.parse(sv); }catch(e){}
 
 // ---- Guitar Strumming Patterns (主歌/副歌刷法系統) ----
@@ -1490,7 +1496,7 @@ async function saveSong(auto){ if(!lastGp||!score){ if(!auto)status('先用「�
   if(auto&&!curSong)return;   // automatic saves only update a song that is already in the list
   const useMp3=!!mp3, base={id:(curSong&&curSong.gpName===lastGp.name)?curSong.id:'s'+Date.now(), name:(score.title||lastGp.name.replace(/\.[^.]+$/,''))+(score.artist?' — '+score.artist:''),
     gp:lastGp.bytes.buffer.slice(0), gpName:lastGp.name, start:+$('startbar').value, delay:+$('delay').value, bpm:+$('bpm').value, sp:SP?syncRec().sp:undefined, added:Date.now(),
-    customChords:songCustomChords, customVoicings:customVoicings, strumPatterns:songStrumPatterns,
+    customChords:songCustomChords, customVoicings:customVoicings, strumPatterns:songStrumPatterns, ...editorStateForSave(),
     fromTxt: (curSong && curSong.fromTxt) || !!($('txtin') && $('txtin').value.trim()),
     scoreText: ($('txtin') && $('txtin').value) || (curSong && curSong.scoreText) || ''};
   base.ytId=ytReady?ytId:''; base.src=$('src').value;
@@ -1589,7 +1595,7 @@ async function openPdf(files){ try{api.stop()}catch(x){}
 
 // ---- chord diagrams: shape from the score file if it defines one, otherwise from the chords-db dictionary
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11}, KEYS=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'], BASS=['C','C#','D','D#','E','F','F#','G','G#','A','Bb','B'];
-const SUF={'':'major','M':'major','maj':'major','m':'minor','min':'minor','-':'minor','sus':'sus4','+':'aug','°':'dim','o':'dim','M7':'maj7','Maj7':'maj7','△':'maj7','min7':'m7','-7':'m7','ø':'m7b5','m7-5':'m7b5','7sus':'7sus4','mM7':'mmaj7','madd9':'madd9','M9':'maj9','min9':'m9','6/9':'69','m6/9':'m69'};
+const SUF={'':'major','M':'major','maj':'major','m':'minor','min':'minor','-':'minor','sus':'sus4','+':'aug','°':'dim','o':'dim','M7':'maj7','Maj7':'maj7','△':'maj7','min7':'m7','-7':'m7','ø':'m7b5','ø7':'m7b5','m7-5':'m7b5','°7':'dim7','o7':'dim7','7-5':'7b5','7-9':'7b9','7(b9)':'7b9','7(#9)':'7#9','7(♭9)':'7b9','7(♯9)':'7#9','7sus':'7sus4','mM7':'mmaj7','madd9':'madd9','M9':'maj9','min9':'m9','6/9':'69','m6/9':'m69'};
 const pcOf=s=>{ const m=/^([A-G])([#b♯♭]?)/.exec(s); if(!m)return null; return (PC[m[1]]+(m[2]==='#'||m[2]==='♯'?1:m[2]?11:0))%12; };
 function parseShape(str){ const p=str.split('|'), base=+p[1]||1; return p[0].split('').map(c=>c==='x'?-1:(+c===0?0:+c+base-1)); }
 function shapeFor(ch, mode) {
@@ -1717,8 +1723,8 @@ function downloadBytes(bytes, name) {
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
-const txtDemoSong = `Title: 晴天 (A小調五聲音階)
-Artist: 周杰倫
+const DEMO_TITLE = 'A 小調五聲音階練習';
+const txtDemoSong = `Title: ${DEMO_TITLE}
 BPM: 100
 
 [Intro:arp4]
@@ -1786,8 +1792,8 @@ const PRESET_CODES = {
   waltz_classic: { code: 'B-D-D-', mode: 'strum', beats: '6', name: '傳統華爾滋 3/4 (澎 恰 恰)' },
   waltz_pop: { code: 'D-DUDU', mode: 'strum', beats: '6', name: '輕快 3/4 流行刷法' },
   waltz_folk: { code: 'D-D-DU', mode: 'strum', beats: '6', name: '民謠 3/4 抒情刷法' },
-  slow_rock_68: { code: 'D-D-D-D-D-D-', mode: 'strum', beats: '6', name: '慢搖滾三連音 6/8' },
-  folk_68: { code: 'D-UD-UD-UD-U', mode: 'strum', beats: '6', name: '民謠 6/8 搖擺刷法' },
+  slow_rock_68: { code: 'D-D-D-D-D-D-', mode: 'strum', beats: '12', name: '慢搖滾三連音 6/8' },
+  folk_68: { code: 'D-UD-UD-UD-U', mode: 'strum', beats: '12', name: '民謠 6/8 搖擺刷法' },
 
   // 分解和弦 (指彈)
   arp4: { code: 'B3231323', mode: 'arp', beats: '8', name: '經典 T123 分解' },
@@ -1797,6 +1803,45 @@ const PRESET_CODES = {
   arp_waltz_34: { code: 'B32123', mode: 'arp', beats: '6', name: '華爾滋 3/4 分解' },
   arp_slow_rock_68: { code: 'B32123', mode: 'arp', beats: '6', name: '慢搖滾 6/8 指彈' }
 };
+
+// 換歌時重設編輯器。ps = 歌單裡的歌（還原它存的文字譜、和弦、刷法），沒有 ps 就是直接開的譜檔（全部清空）。
+// 以前只在歌單裡的歌有存文字譜時才覆蓋，於是開一首 .gp 後，上一首的文字譜還留著，
+// 改和弦時就用上一首的文字譜重新產生譜面，連歌單都多出一首混在一起的歌。
+function resetEditorState(ps, score) {
+  songCustomChords = ps && ps.customChords ? JSON.parse(JSON.stringify(ps.customChords)) : {};
+  songStrumPatterns = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STRUM_CONFIG)), (ps && ps.strumPatterns) || {});
+  songBarLyrics = {};
+  for (const k in sectionPatterns) delete sectionPatterns[k];
+  if (ps && ps.sectionPatterns) Object.assign(sectionPatterns, JSON.parse(JSON.stringify(ps.sectionPatterns)));
+  const meta = (ps && ps.txtMeta) || {};
+  if ($('txtin')) $('txtin').value = (ps && ps.scoreText) || '';
+  txtOrigBarChords = {};
+  if (ps && ps.scoreText) migrateOverlayIntoTxt();
+  if ($('txttitle')) $('txttitle').value = meta.title !== undefined ? meta.title : ((score && score.title) || '');
+  if ($('txtartist')) $('txtartist').value = meta.artist !== undefined ? meta.artist : ((score && score.artist) || '');
+  if ($('txtbpm')) $('txtbpm').value = meta.bpm || (score && score.tempo) || 100;
+  curStrumTab = 'default';
+  cmCurBar = 0;
+  cmSelectedBeat = 0;
+  showEditorMsg('');
+  if ($('txtin') && $('txtin').value.trim()) syncSectionsFromTxt();
+  else if (!sectionPatterns.default) syncSectionsFromTxt();
+  loadSectionToEditor(curStrumTab);
+  try { buildMap(); } catch (e) {}
+}
+
+// 存進歌單的編輯器狀態（saveSong 和「存入歌單」共用）
+function editorStateForSave() {
+  if (sectionPatterns[curStrumTab]) {
+    sectionPatterns[curStrumTab].tokens = peTokens.slice();
+    sectionPatterns[curStrumTab].mode = $('pe_mode')?.value || 'strum';
+    sectionPatterns[curStrumTab].beats = $('pe_beats')?.value || '8';
+  }
+  return {
+    sectionPatterns: JSON.parse(JSON.stringify(sectionPatterns)),
+    txtMeta: { title: $('txttitle')?.value.trim() || '', artist: $('txtartist')?.value.trim() || '', bpm: parseInt($('txtbpm')?.value, 10) || 100 }
+  };
+}
 
 function getPresetInfo(patName) {
   if (!patName) return null;
@@ -1815,11 +1860,18 @@ function getPresetInfo(patName) {
       key: 'custom',
       code: clean.toUpperCase(),
       mode: isArp ? 'arp' : 'strum',
-      beats: String(clean.length === 6 ? 6 : (clean.length === 16 ? 16 : 8)),
+      // 長度不是 6／8／12／16 的代碼照樣保留原長度，轉檔時 txt2gp 會補滿或截斷並提醒
+      beats: String(clean.length),
       name: '自訂節奏代碼'
     };
   }
   return null;
+}
+
+// txt 開頭的拍號（TS: 3/4 或 拍號: 6/8），沒寫就是 4/4
+function headerTsOf(text) {
+  const m = /^\s*(?:ts|拍號)\s*[:：]\s*(\d+)\s*\/\s*(\d+)/im.exec(text || '');
+  return m ? m[1] + '/' + m[2] : '4/4';
 }
 
 // 取得目前文本中檢測到的段落清單
@@ -1862,8 +1914,11 @@ const ARP_CYCLE = ['B', '3', '2', '1', '4', '-', '.'];
 const BEAT_LABELS = {
   8: ['1', '&', '2', '&', '3', '&', '4', '&'],
   6: ['1', '&', '2', '&', '3', '&'],
-  16: ['1', 'e', '&', 'a', '2', 'e', '&', 'a', '3', 'e', '&', 'a', '4', 'e', '&', 'a']
+  16: ['1', 'e', '&', 'a', '2', 'e', '&', 'a', '3', 'e', '&', 'a', '4', 'e', '&', 'a'],
+  12: ['1', '&', '2', '&', '3', '&', '4', '&', '5', '&', '6', '&']
 };
+// 格數 → 拍號與單位（6 格 = 3/4 八分、8 格 = 4/4 八分、12 格 = 6/8 十六分、16 格 = 4/4 十六分）
+const BEATS_METER = { 6: { ts: [3, 4], unit: 8 }, 8: { ts: [4, 4], unit: 8 }, 12: { ts: [6, 8], unit: 16 }, 16: { ts: [4, 4], unit: 16 } };
 
 const TOKEN_INFO = {
   'D': { sym: '↓', name: '下刷', col: 'var(--accent)' },
@@ -1887,7 +1942,7 @@ function renderPeGrid() {
   while (peTokens.length < total) peTokens.push('-');
   if (peTokens.length > total) peTokens = peTokens.slice(0, total);
 
-  peGrid.style.gridTemplateColumns = 'repeat(' + (total > 8 ? 8 : total) + ', minmax(0, 1fr))';
+  peGrid.style.gridTemplateColumns = 'repeat(' + (total === 12 ? 6 : (total > 8 ? 8 : total)) + ', minmax(0, 1fr))';
   peGrid.innerHTML = '';
 
   const labels = BEAT_LABELS[total] || [];
@@ -1900,9 +1955,9 @@ function renderPeGrid() {
 
     const sub = labels[i] !== undefined ? labels[i] : (i + 1);
 
-    card.innerHTML = '<span style="font-size:10px; color:var(--mute); font-weight:700;">' + sub + '</span>' +
-      '<b style="font-size:18px; line-height:1; color:' + info.col + ';">' + info.sym + '</b>' +
-      '<span style="font-size:9px; color:var(--mute); white-space:nowrap;">' + info.name + '</span>';
+    card.innerHTML = '<span style="font-size:10px; color:var(--mute); font-weight:700;">' + escHtml(sub) + '</span>' +
+      '<b style="font-size:18px; line-height:1; color:' + info.col + ';">' + escHtml(info.sym) + '</b>' +
+      '<span style="font-size:9px; color:var(--mute); white-space:nowrap;">' + escHtml(info.name) + '</span>';
 
     card.onclick = () => {
       if (activeSlot === i) {
@@ -1929,6 +1984,7 @@ function syncCodeFromTokens() {
     sectionPatterns[curStrumTab].mode = $('pe_mode')?.value || 'strum';
     sectionPatterns[curStrumTab].beats = $('pe_beats')?.value || '8';
     sectionPatterns[curStrumTab].patternVal = 'custom';
+    sectionPatterns[curStrumTab].auto = false;   // 使用者自己改過，之後換拍號也不要自動蓋掉
   }
   renderSectionTabs(getDetectedSectionsFromTxt());
   setEditorStatus('刷法已自訂 (' + curStrumTab + ')');
@@ -1938,19 +1994,27 @@ function applyTokensFromCode(str) {
   const clean = (str || '').trim().toUpperCase();
   if (!clean) return;
   const tokens = clean.includes(' ') ? clean.split(/\s+/) : clean.split('');
+  // 只接受編輯器看得懂的記號，長度要剛好是一小節（6 = 3/4、8 = 4/4、16 = 4/4 十六分）
+  const bad = tokens.filter(t => !/^[DUX\-.B1-6]$/.test(t));
+  if (bad.length) {
+    showEditorMsg('刷法代碼裡有看不懂的記號：' + [...new Set(bad)].join(' ') + '。可用 D U X - . B 1~6。');
+    setEditorStatus('代碼有誤', true);
+    return;
+  }
+  if (!BEATS_METER[tokens.length]) {
+    showEditorMsg('刷法代碼有 ' + tokens.length + ' 格，一小節要剛好 6 格（3/4）、8 格（4/4）、12 格（6/8）或 16 格（4/4 十六分）。');
+    setEditorStatus('代碼長度不對', true);
+    return;
+  }
+  showEditorMsg('');
   if (tokens.length) {
     peTokens = tokens;
     const peBeats = $('pe_beats'), peMode = $('pe_mode'), peActionsStrum = $('pe_actions_strum'), peActionsArp = $('pe_actions_arp');
-    if (peBeats) {
-      if (tokens.length === 6) peBeats.value = '6';
-      else if (tokens.length === 16) peBeats.value = '16';
-      else if (tokens.length === 8) peBeats.value = '8';
-    }
-    if (tokens.some(t => /^[1-6B]$/.test(t))) {
-      if (peMode) peMode.value = 'arp';
-      if (peActionsStrum) peActionsStrum.hidden = true;
-      if (peActionsArp) peActionsArp.hidden = false;
-    }
+    if (peBeats) peBeats.value = String(tokens.length);
+    const isArp = tokens.some(t => /^[1-6B]$/.test(t));
+    if (peMode) peMode.value = isArp ? 'arp' : 'strum';
+    if (peActionsStrum) peActionsStrum.hidden = isArp;
+    if (peActionsArp) peActionsArp.hidden = !isArp;
     activeSlot = 0;
     renderPeGrid();
     syncCodeFromTokens();
@@ -1966,15 +2030,29 @@ function syncSectionsFromTxt() {
     { name: '副歌', pattern: 'pop8' }
   ];
 
-  if (!sectionPatterns['default']) {
-    sectionPatterns['default'] = { tokens: ['D','-','D','U','-','U','D','U'], mode: 'strum', beats: '8', patternVal: 'folk' };
-  }
+  // 沒指定刷法的段落依 txt 開頭的拍號（TS: 3/4、6/8…）挑預設；拍號改了，這些自動挑的也跟著換
+  const ts = headerTsOf($('txtin') ? $('txtin').value : '');
+  const autoEntry = sName => {
+    const set = (window.Txt2Gp && Txt2Gp.TS_DEFAULT_PATTERNS && Txt2Gp.TS_DEFAULT_PATTERNS[ts]) || { strum: 'folk', chorus: 'pop8' };
+    const arpByTs = { '3/4': 'arp_waltz_34', '6/8': 'arp_slow_rock_68' };
+    const key = sName === 'default' ? set.strum
+      : /chorus|副歌|高潮/i.test(sName) ? set.chorus
+      : /arp|intro|前奏|指彈/i.test(sName) ? (arpByTs[ts] || 'arp4') : set.strum;
+    const p = getPresetInfo(key) || getPresetInfo('folk');
+    return { tokens: p.code.split(''), mode: p.mode, beats: p.beats, patternVal: p.key, tagPattern: null, auto: true, autoTs: ts };
+  };
+  const stale = sp => !sp || (sp.auto && sp.autoTs !== ts);
+  const replaced = new Set();
+  if (stale(sectionPatterns['default'])) { sectionPatterns['default'] = autoEntry('default'); replaced.add('default'); }
 
   list.forEach(sec => {
     const sName = sec.name;
     const specified = sec.pattern ? getPresetInfo(sec.pattern) : null;
 
-    if (!sectionPatterns[sName]) {
+    // 段落標籤上的刷法（[Verse:folk]）被拿掉了：這段改回依拍號自動挑，不要留著舊標籤的刷法
+    const tagRemoved = !specified && sectionPatterns[sName] && sectionPatterns[sName].tagPattern;
+    if (!sectionPatterns[sName] || tagRemoved || (!specified && stale(sectionPatterns[sName]))) {
+      replaced.add(sName);
       if (specified) {
         sectionPatterns[sName] = {
           tokens: specified.code.split(''),
@@ -1983,30 +2061,8 @@ function syncSectionsFromTxt() {
           patternVal: specified.key,
           tagPattern: sec.pattern
         };
-      } else if (/chorus|副歌|高潮/i.test(sName)) {
-        sectionPatterns[sName] = {
-          tokens: ['D','-','D','U','D','U','D','U'],
-          mode: 'strum',
-          beats: '8',
-          patternVal: 'pop8',
-          tagPattern: null
-        };
-      } else if (/arp|intro|前奏|指彈/i.test(sName)) {
-        sectionPatterns[sName] = {
-          tokens: ['B','3','2','3','1','3','2','3'],
-          mode: 'arp',
-          beats: '8',
-          patternVal: 'arp4',
-          tagPattern: null
-        };
       } else {
-        sectionPatterns[sName] = {
-          tokens: ['D','-','D','U','-','U','D','U'],
-          mode: 'strum',
-          beats: '8',
-          patternVal: 'folk',
-          tagPattern: null
-        };
+        sectionPatterns[sName] = autoEntry(sName);
       }
     } else if (sec.pattern && sectionPatterns[sName].tagPattern !== sec.pattern) {
       if (specified) {
@@ -2024,6 +2080,8 @@ function syncSectionsFromTxt() {
   if (!sectionPatterns[curStrumTab]) {
     curStrumTab = list[0].name;
     loadSectionToEditor(curStrumTab);
+  } else if (replaced.has(curStrumTab)) {
+    loadSectionToEditor(curStrumTab);   // 編輯器畫面要換成新挑的刷法，不然下次轉檔又被舊的蓋回去
   }
 
   setEditorStatus('已同步 ' + list.length + ' 個段落');
@@ -2190,10 +2248,11 @@ function togglePane(open, targetTab) {
 
     if (curMainEditorTab === 'txt') {
       const txtin = $('txtin');
-      if (txtin && !txtin.value.trim()) {
+      // 只有還沒開任何歌時才自動填範例；開著 .gp 時填範例，之後改和弦會被誤當成這首歌的文字譜
+      if (txtin && !txtin.value.trim() && !lastGp && !curSong) {
         txtin.value = txtDemoSong;
-        $('txttitle').value = '晴天 (A小調五聲音階)';
-        $('txtartist').value = '周杰倫';
+        $('txttitle').value = DEMO_TITLE;
+        $('txtartist').value = '';
         $('txtbpm').value = 100;
       }
       syncSectionsFromTxt();
@@ -2219,8 +2278,8 @@ function processTxt(opts = {}) {
   showEditorMsg('');
   try {
     if (!window.Txt2Gp) throw new Error('Txt2Gp 元件尚未載入完成，請稍候再試。');
-    const title = $('txttitle')?.value.trim() || '未命名和弦譜';
-    const artist = $('txtartist')?.value.trim() || '';
+    let title = $('txttitle')?.value.trim() || '';
+    const artist = $('txtartist')?.value.trim() || '';   // 可以留空
     const tempo = parseInt($('txtbpm')?.value, 10) || 100;
 
     if (sectionPatterns[curStrumTab]) {
@@ -2234,8 +2293,8 @@ function processTxt(opts = {}) {
     for (const k in sectionPatterns) {
       const sp = sectionPatterns[k];
       if (sp.patternVal === 'custom') {
-        const ts = (parseInt(sp.beats, 10) === 6) ? [3, 4] : [4, 4];
-        resolvedPatterns[k] = Txt2Gp.createPatternFromTokens(sp.tokens, sp.mode, ts, k + '自訂');
+        const meter = BEATS_METER[parseInt(sp.beats, 10)] || BEATS_METER[8];
+        resolvedPatterns[k] = Txt2Gp.createPatternFromTokens(sp.tokens, sp.mode, meter.ts, k + '自訂', meter.unit);
       } else {
         resolvedPatterns[k] = sp.patternVal;
       }
@@ -2252,6 +2311,10 @@ function processTxt(opts = {}) {
     updateStrumStrip(curBar);
 
     const p = Txt2Gp.parseSongTxt(text);
+    if (!title) {
+      title = p.meta.title || '未命名和弦譜';
+      if (p.meta.title && $('txttitle')) $('txttitle').value = p.meta.title;
+    }
     if (!p.sections.length) {
       showEditorMsg('未找到任何和弦或段落。請確認格式，例如包含和弦名稱（C, G, Am, Em 等）。');
       setEditorStatus('格式錯誤', true);
@@ -2267,6 +2330,8 @@ function processTxt(opts = {}) {
       shapes: customVoicings
     });
     const gpRes = texToGp(texRes.tex);
+    // 刷法長度被補滿／截斷、拍號和 TS: 不同等狀況：照樣轉檔，但要讓使用者知道
+    if (texRes.warnings && texRes.warnings.length) showEditorMsg('提醒：' + texRes.warnings.join(' '));
     if (texRes.lyrics) {
       songBarLyrics = Object.assign({}, texRes.lyrics);
     }
@@ -2282,6 +2347,7 @@ function processTxt(opts = {}) {
         $('delsong').disabled = true;
         clearAudio();
       }
+      txtLoadPending = true;   // 同一首歌的更新：scoreLoaded 不要把編輯器清掉
       api.load(gpRes.bytes.slice());
       setEditorStatus('✓ 已同步右側 (' + texRes.totalBars + ' 小節)');
       if (ready && !opts.silent) {
@@ -2317,6 +2383,8 @@ function initTxtBuilder() {
   const txtin = $('txtin');
   if (!txtin) return;
 
+  // 使用者自己打字改了文字譜，小節可能整個移位：「還原」記住的舊和弦就不能再用了
+  txtin.addEventListener('input', () => { txtOrigBarChords = {}; });
   // 離開編輯器後自動同步段落與節奏刷法編輯器
   txtin.addEventListener('blur', () => syncSectionsFromTxt());
   txtin.addEventListener('change', () => syncSectionsFromTxt());
@@ -2334,8 +2402,8 @@ function initTxtBuilder() {
 
   $('txtdemo').onclick = () => {
     txtin.value = txtDemoSong;
-    $('txttitle').value = '晴天 (A小調五聲音階)';
-    $('txtartist').value = '周杰倫';
+    $('txttitle').value = DEMO_TITLE;
+    $('txtartist').value = '';
     $('txtbpm').value = 100;
     showEditorMsg('');
     syncSectionsFromTxt();
@@ -2359,6 +2427,13 @@ function initTxtBuilder() {
     try {
       const text = await f.text();
       txtin.value = text;
+      // 欄位跟著新檔案的 Title／Artist／BPM 走；檔案沒寫歌手就留空，不沿用上一首的
+      try {
+        const meta = Txt2Gp.parseSongTxt(text).meta;
+        $('txttitle').value = meta.title || f.name.replace(/\.txt$/i, '');
+        $('txtartist').value = meta.artist || '';
+        if (/^\s*(bpm|tempo|速度)\s*[:：]/im.test(text)) $('txtbpm').value = meta.tempo;
+      } catch (x) {}
       showEditorMsg('已載入檔案：' + f.name, false);
       syncSectionsFromTxt();
       setEditorStatus('已載入檔案');
@@ -2445,6 +2520,10 @@ function initTxtBuilder() {
     if ($('txtin')) $('txtin').value = scoreText;
 
     // 3. 節奏刷法設定 (strumming / sectionPatterns / patterns)
+    // 匯入的是另一首歌：先清掉目前這首的刷法和和弦修改，不然沒寫到的段落／小節會沿用上一首的
+    for (const k in sectionPatterns) delete sectionPatterns[k];
+    for (const b in songCustomChords) delete songCustomChords[b];
+    txtOrigBarChords = {};
     const strumming = obj.strumming || {};
     const importedPatterns = strumming.sections || obj.sectionPatterns || obj.patterns;
     if (importedPatterns && typeof importedPatterns === 'object') {
@@ -2477,10 +2556,11 @@ function initTxtBuilder() {
     // 4. 小節自訂和弦 (customChords / songCustomChords)
     const importedChords = obj.customChords || obj.songCustomChords;
     if (importedChords && typeof importedChords === 'object') {
-      for (const b in songCustomChords) delete songCustomChords[b];
       for (const b in importedChords) {
         songCustomChords[b] = JSON.parse(JSON.stringify(importedChords[b]));
       }
+      // 有文字譜的話，和弦修改直接寫進文字譜
+      if (scoreText) migrateOverlayIntoTxt();
     }
 
     // 5. 自訂指型按法 (customVoicings / voicings / shapes)
@@ -2622,6 +2702,7 @@ function initTxtBuilder() {
           sectionPatterns[curStrumTab].mode = p.mode;
           sectionPatterns[curStrumTab].beats = p.beats;
           sectionPatterns[curStrumTab].patternVal = p.key;
+          sectionPatterns[curStrumTab].auto = false;
         }
         renderSectionTabs(getDetectedSectionsFromTxt());
         setEditorStatus('已選用 ' + ($('txtpattern').selectedOptions[0]?.text || v));
@@ -2657,6 +2738,7 @@ function initTxtBuilder() {
       customChords: songCustomChords,
       customVoicings: customVoicings,
       strumPatterns: songStrumPatterns,
+      ...editorStateForSave(),
       added: old ? old.added : Date.now()
     });
     try {
@@ -2684,6 +2766,52 @@ initTxtBuilder();
 // ==========================================
 let cmCurBar = 0;
 let cmSelectedBeat = 0;
+
+// ---- 和弦修改寫到哪裡 ----
+// 文字譜產生的譜：直接改文字譜（txt 是唯一的資料來源，存檔、匯出、再開都一致）。
+// .gp／PDF 的譜沒有文字譜：才把改過的和弦記在 songCustomChords（以小節編號為準，這種譜的小節不會變動）。
+let txtOrigBarChords = {};   // 文字譜模式下每個小節第一次被改之前的和弦，給「還原」用
+let cmLoadedSig = '';        // 這一小節剛顯示時各拍欄位的內容；存檔時一樣就代表沒改
+function cmBeatSig() {
+  const vals = [];
+  for (let b = 0; $('cmBeatIn_' + b); b++) vals.push($('cmBeatIn_' + b).value.trim());
+  return cmCurBar + '|' + vals.join('|');
+}
+function isTxtScore() {
+  return scoreIsTxt && !!($('txtin') && $('txtin').value.trim()) && !!(window.Txt2Gp && Txt2Gp.setBarChords);
+}
+function readBarChords(barIdx) {
+  if (isTxtScore()) return Txt2Gp.getBarChords($('txtin').value, barIdx);
+  return songCustomChords[barIdx] || null;
+}
+function writeBarChords(barIdx, list) {
+  if (isTxtScore()) {
+    const txt = $('txtin').value;
+    const cur = Txt2Gp.getBarChords(txt, barIdx);
+    // 沒有真的改（例如只是切到下一小節時順手存一下）：不動 txt，免得 x2 被展開、C(2) 被改寫
+    if (cur && list && Txt2Gp.formatBarChords(cur) === Txt2Gp.formatBarChords(list)) return true;
+    if (!(barIdx in txtOrigBarChords) && cur) txtOrigBarChords[barIdx] = cur;
+    const out = list && list.length ? Txt2Gp.setBarChords(txt, barIdx, list) : null;
+    if (out === null) return false;
+    $('txtin').value = out;
+    delete songCustomChords[barIdx];
+    return true;
+  }
+  if (list && list.length) songCustomChords[barIdx] = list;
+  else delete songCustomChords[barIdx];
+  return true;
+}
+// 舊版存下來的「文字譜 + 以小節編號記的和弦修改」：一次寫進文字譜，之後就不再用小節編號
+function migrateOverlayIntoTxt() {
+  const txtin = $('txtin');
+  if (!txtin || !txtin.value.trim() || !window.Txt2Gp || !Txt2Gp.setBarChords) return;
+  let txt = txtin.value;
+  Object.keys(songCustomChords).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b).forEach(b => {
+    const out = Txt2Gp.setBarChords(txt, b, songCustomChords[b]);
+    if (out !== null) { txt = out; delete songCustomChords[b]; }
+  });
+  txtin.value = txt;
+}
 
 function getScoreSections() {
   const result = [];
@@ -2722,36 +2850,44 @@ function closeChordEditor() {
 function applyCustomChordsToScore() {
   if (!score || !score.tracks) return;
   try {
+    // 每一拍第一次被改之前，先記下譜檔原本的和弦（_origChord），之後「還原」或「清空」才能真的回到原樣。
+    // 以前只處理有修改的小節，被還原的小節不會被碰到，譜上就一直留著改過的和弦名稱。
     score.tracks.forEach(t => {
       if (!t.staves) return;
-      for (const bStr in songCustomChords) {
-        const bIdx = parseInt(bStr, 10);
-        if (isNaN(bIdx)) continue;
-        const list = songCustomChords[bIdx] || [];
-        for (const st of t.staves) {
-          const bar = st.bars && st.bars[bIdx];
-          if (!bar || !bar.voices) continue;
+      for (const st of t.staves) {
+        (st.bars || []).forEach((bar, bIdx) => {
+          if (!bar || !bar.voices) return;
+          const list = songCustomChords[bIdx] || null;
           for (const v of bar.voices) {
             if (!v.beats || !v.beats.length) continue;
             const numBeats = v.beats.length;
             v.beats.forEach((bt, btIdx) => {
+              if (!list) {
+                if (bt._origChord !== undefined) {   // 改過、現在沒有修改了：還原
+                  bt.chord = bt._origChord;
+                  if (bt.chord && bt._origChordName !== undefined) bt.chord.name = bt._origChordName;
+                  delete bt._origChord;
+                  delete bt._origChordName;
+                }
+                return;
+              }
+              if (bt._origChord === undefined) {
+                bt._origChord = bt.chord || null;
+                bt._origChordName = bt.chord ? bt.chord.name : undefined;
+              }
               const frac = btIdx / numBeats;
               const found = list.find(c => Math.abs((c.posFrac || 0) - frac) < (0.6 / numBeats));
               if (found && found.name) {
-                if (!bt.chord) {
-                  try {
-                    bt.chord = new alphaTab.model.Chord();
-                  } catch (e) {
-                    bt.chord = { name: found.name };
-                  }
-                }
-                bt.chord.name = cleanChordName(found.name);
-              } else if (list.length === 0) {
+                let ch;
+                try { ch = new alphaTab.model.Chord(); } catch (e) { ch = {}; }
+                ch.name = cleanChordName(found.name);
+                bt.chord = ch;     // 用新的物件，不去改譜檔原本那個和弦物件
+              } else {
                 bt.chord = null;
               }
             });
           }
-        }
+        });
       }
     });
   } catch (e) {
@@ -2765,7 +2901,8 @@ function syncScoreChordsAndTab(opts = {}) {
   applyCustomChordsToScore();
   buildMap();
 
-  const hasTxt = $('txtin') && $('txtin').value.trim();
+  // 只有「目前的譜本來就是文字譜產生的」才重新產生；開著 .gp 時文字框就算有字也不能拿來蓋掉這首歌
+  const hasTxt = scoreIsTxt && $('txtin') && $('txtin').value.trim();
   if (hasTxt) {
     const keepBar = cmCurBar;
     processTxt({
@@ -2849,7 +2986,11 @@ function updateChordEditorUI(soft = false) {
 
   const mb = score.masterBars[cmCurBar];
   const barChords = [];
-  if (songCustomChords[cmCurBar] && songCustomChords[cmCurBar].length) {
+  // 文字譜模式：直接讀文字譜裡的寫法（保留 C(2)、C@8 這類把位後綴；譜面上的和弦名稱已經被去掉後綴了）
+  const txtBar = isTxtScore() ? Txt2Gp.getBarChords($('txtin').value, cmCurBar) : null;
+  if (txtBar && txtBar.length) {
+    txtBar.forEach(c => barChords.push({ name: c.name, posFrac: c.posFrac || 0 }));
+  } else if (songCustomChords[cmCurBar] && songCustomChords[cmCurBar].length) {
     songCustomChords[cmCurBar].forEach(c => barChords.push({ name: c.name, posFrac: c.posFrac || 0 }));
   } else {
     const list = chords.filter(c => c.bar === cmCurBar);
@@ -2864,7 +3005,7 @@ function updateChordEditorUI(soft = false) {
   if (lyHint) {
     if (curLyric) {
       lyHint.hidden = false;
-      lyHint.innerHTML = '<span style="color:var(--accent);font-weight:700;margin-right:6px;">🎤 本小節歌詞：</span>' + curLyric;
+      lyHint.innerHTML = '<span style="color:var(--accent);font-weight:700;margin-right:6px;">🎤 本小節歌詞：</span>' + escHtml(curLyric);
     } else {
       lyHint.hidden = true;
       lyHint.innerHTML = '';
@@ -2888,6 +3029,7 @@ function updateChordEditorUI(soft = false) {
         const card = inp ? inp.closest('.cm-beat-card') : null;
         if (card) card.classList.toggle('active', b === cmSelectedBeat);
       }
+      cmLoadedSig = cmBeatSig();
       return;
     }
   }
@@ -2900,13 +3042,13 @@ function updateChordEditorUI(soft = false) {
       const bFrac = b / numBeats;
       const ch = barChords.find(c => Math.abs(c.posFrac - bFrac) < (0.5 / numBeats));
       const chordName = ch ? ch.name : (b === 0 && barChords[0] ? barChords[0].name : '');
-      const lyricBadge = (b === 0 && curLyric) ? '<span class="cm-beat-lyric" title="' + curLyric + '">🎤 ' + curLyric + '</span>' : '';
+      const lyricBadge = (b === 0 && curLyric) ? '<span class="cm-beat-lyric" title="' + escHtml(curLyric) + '">🎤 ' + escHtml(curLyric) + '</span>' : '';
 
       const col = document.createElement('div');
       col.className = 'cm-beat-card' + (b === cmSelectedBeat ? ' active' : '');
       col.innerHTML = lyricBadge +
         '<span class="cm-beat-lbl">第 ' + (b + 1) + ' 拍</span>' +
-        '<input type="text" class="cm-beat-inp" id="cmBeatIn_' + b + '" value="' + chordName + '" placeholder="和弦" autocomplete="off">' +
+        '<input type="text" class="cm-beat-inp" id="cmBeatIn_' + b + '" value="' + escHtml(chordName) + '" placeholder="和弦" autocomplete="off">' +
         '<button type="button" class="btn-subtle cm-beat-clear" style="font-size:10px;padding:1px 5px;line-height:1;margin-top:2px" title="清空此拍">✕ 清空</button>';
 
       const inp = col.querySelector('.cm-beat-inp');
@@ -2979,6 +3121,7 @@ function updateChordEditorUI(soft = false) {
     }
     qIn.value = names.join(' ');
   }
+  cmLoadedSig = cmBeatSig();
 
   buildPaletteUI();
   updateVoicingPickerUI();
@@ -3222,6 +3365,9 @@ function saveChordEditor(soft = false) {
   const numBeats = mb.timeSignatureNumerator || 4;
   const result = [];
 
+  // 欄位和剛顯示這一小節時一模一樣（例如只是切到下一小節）：沒有修改，不寫回
+  if (cmBeatSig() === cmLoadedSig) return;
+
   for (let b = 0; b < numBeats; b++) {
     const v = $('cmBeatIn_' + b)?.value.trim();
     if (v) {
@@ -3229,13 +3375,16 @@ function saveChordEditor(soft = false) {
     }
   }
 
-  if (result.length > 0) {
-    songCustomChords[cmCurBar] = result;
-  } else {
-    delete songCustomChords[cmCurBar];
+  if (!result.length && isTxtScore()) {
+    // 文字譜裡每小節都要有和弦：全部清空就不動 txt，請使用者按「還原」回到原本的和弦
+    status('文字譜的每一小節至少要有一個和弦；要回到原本的和弦請按「還原」。', true);
+    updateChordEditorUI();
+    return;
   }
+  writeBarChords(cmCurBar, result);
 
   syncScoreChordsAndTab();
+  cmLoadedSig = cmBeatSig();
   if (!soft) {
     status('已更新第 ' + (cmCurBar + 1) + ' 小節和弦！');
     setEditorStatus('✓ 第 ' + (cmCurBar + 1) + ' 小節已更新');
@@ -3244,7 +3393,13 @@ function saveChordEditor(soft = false) {
 
 function resetBarChords() {
   if (!score) return;
-  delete songCustomChords[cmCurBar];
+  if (isTxtScore()) {
+    // 文字譜：寫回這一小節第一次被改之前的和弦
+    const orig = txtOrigBarChords[cmCurBar];
+    if (orig) { writeBarChords(cmCurBar, orig); delete txtOrigBarChords[cmCurBar]; }
+  } else {
+    delete songCustomChords[cmCurBar];
+  }
   syncScoreChordsAndTab();
   updateChordEditorUI();
   status('已還原第 ' + (cmCurBar + 1) + ' 小節原譜和弦');
@@ -3256,9 +3411,9 @@ function copyBarToNext() {
   saveChordEditor();
   if (cmCurBar + 1 < score.masterBars.length) {
     cmCurBar++;
-    const prevChords = songCustomChords[cmCurBar - 1];
-    if (prevChords) {
-      songCustomChords[cmCurBar] = JSON.parse(JSON.stringify(prevChords));
+    const prevChords = readBarChords(cmCurBar - 1);
+    if (prevChords && prevChords.length) {
+      writeBarChords(cmCurBar, JSON.parse(JSON.stringify(prevChords)));
       syncScoreChordsAndTab();
     }
     updateChordEditorUI();
@@ -3270,7 +3425,8 @@ function applyQuickChordInput() {
   if (!score || !score.masterBars) return;
   const val = $('cmQuickInput')?.value.trim();
   if (!val) return;
-  const chords = val.split(/[\s,|-]+/).filter(Boolean);
+  // 不用 - 當分隔：F#m7-5 的 -5 是和弦的一部分
+  const chords = val.split(/[\s,|]+/).filter(Boolean);
   const mb = score.masterBars[cmCurBar];
   const numBeats = mb.timeSignatureNumerator || 4;
 
@@ -3295,7 +3451,8 @@ function applyBatchProgression() {
     status('請先輸入進行和弦序列，例如：C Am F G', true);
     return;
   }
-  const prog = progText.split(/[\s,|/]+/).filter(Boolean);
+  // 不用 / 當分隔：D/F# 是一個和弦（轉位）
+  const prog = progText.split(/[\s,|]+/).filter(Boolean);
   if (!prog.length) return;
 
   const isSec = $('cmScopeSec')?.checked;
@@ -3317,7 +3474,7 @@ function applyBatchProgression() {
   let pIdx = 0;
   for (let b = start; b <= end; b++) {
     const chordName = prog[pIdx % prog.length];
-    songCustomChords[b] = [{ name: chordName, posFrac: 0 }];
+    writeBarChords(b, [{ name: chordName, posFrac: 0 }]);
     pIdx++;
   }
 
@@ -3379,7 +3536,7 @@ function renderCustomVoicingChips() {
   names.forEach(name => {
     const chip = document.createElement('span');
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:3px;padding:2px 7px;font-size:11px;font-weight:700;border-radius:999px;background:var(--hit);border:1px solid var(--accent);color:var(--accent);cursor:pointer;';
-    chip.innerHTML = '<span>' + name + '</span><span class="vm-del-chip" style="font-size:10px;color:var(--red);cursor:pointer;margin-left:2px" title="刪除此自訂">✕</span>';
+    chip.innerHTML = '<span>' + escHtml(name) + '</span><span class="vm-del-chip" style="font-size:10px;color:var(--red);cursor:pointer;margin-left:2px" title="刪除此自訂">✕</span>';
 
     chip.onclick = (e) => {
       if (e.target.classList.contains('vm-del-chip')) {
@@ -3555,7 +3712,7 @@ if ($('editStrumBtn')) $('editStrumBtn').onclick = () => togglePane(true, 'txt')
 if ($('chordeditbtn')) $('chordeditbtn').onclick = () => openChordEditor(curBar);
 if ($('voicingeditbtn')) $('voicingeditbtn').onclick = () => openVoicingEditor();
 if ($('cmCancel')) $('cmCancel').onclick = closeChordEditor;
-if ($('cmSave')) $('cmSave').onclick = saveChordEditor;
+if ($('cmSave')) $('cmSave').onclick = () => saveChordEditor();   // 不要把 click 事件當成 soft 參數傳進去
 if ($('cmClearBar')) $('cmClearBar').onclick = () => {
   const mb = score?.masterBars[cmCurBar];
   const numBeats = mb?.timeSignatureNumerator || 4;
@@ -3642,6 +3799,8 @@ window.addEventListener('keydown', ev => {
   const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) ||
                   actTag === 'INPUT' || actTag === 'TEXTAREA' || actTag === 'SELECT' || (document.activeElement && document.activeElement.isContentEditable);
   if (isInput || inEditor) return;
+  // Ctrl+F（搜尋）、Ctrl+E、Cmd+F 之類的組合鍵留給瀏覽器
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   if (ev.key === 'e' || ev.key === 'E') {
     ev.preventDefault();
     openChordEditor(curBar);
