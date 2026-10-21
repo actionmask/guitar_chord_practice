@@ -479,7 +479,7 @@ body.roll .sheet{width:max-content;min-width:100%}
           </label>
           <label class="ep-field">
             <span>BPM</span>
-            <input type="number" id="txtbpm" min="30" max="300" value="100">
+            <input type="number" id="txtbpm" min="30" max="300" value="" placeholder="100">
           </label>
         </div>
 
@@ -776,7 +776,7 @@ G           D
 <script src="soundfont.js?v=70"></script>
 <script src="chords.js?v=70"></script>
 <script src="pdfgp.js?v=70"></script>
-<script src="txt2gp.js?v=102"></script>
+<script src="txt2gp.js?v=103"></script>
 <script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -1855,9 +1855,12 @@ function resetEditorState(ps, score) {
   if ($('txtin')) $('txtin').value = (ps && ps.scoreText) || '';
   txtOrigBarChords = {};
   if (ps && ps.scoreText) migrateOverlayIntoTxt();
-  if ($('txttitle')) $('txttitle').value = meta.title !== undefined ? meta.title : ((score && score.title) || '');
-  if ($('txtartist')) $('txtartist').value = meta.artist !== undefined ? meta.artist : ((score && score.artist) || '');
-  if ($('txtbpm')) $('txtbpm').value = meta.bpm || (score && score.tempo) || 100;
+  // 開啟 App 時的內建範例譜不是使用者的歌：欄位留空，免得之後貼上自己的譜時被寫進「範例」的歌名
+  const fromScore = !!(ps || lastGp || curSong);
+  if ($('txttitle')) $('txttitle').value = meta.title !== undefined ? meta.title : (fromScore && score && score.title || '');
+  if ($('txtartist')) $('txtartist').value = meta.artist !== undefined ? meta.artist : (fromScore && score && score.artist || '');
+  if ($('txtbpm')) $('txtbpm').value = meta.bpm || (fromScore && score && score.tempo) || '';
+  writeAllFieldsToTxt();   // 欄位和文字譜開頭的 Title／Artist／BPM 保持一致（沒有文字譜時不做事）
   curStrumTab = 'default';
   cmCurBar = 0;
   cmSelectedBeat = 0;
@@ -1904,6 +1907,24 @@ function getPresetInfo(patName) {
     };
   }
   return null;
+}
+
+// ---- 歌名／歌手／BPM 欄位和 txt 開頭的 Title:／Artist:／BPM: 雙向同步 ----
+// 改欄位 → 改 txt 那一行（清空就拿掉那一行）；改 txt → 欄位跟著 txt（txt 沒寫那一行，欄位就是空的）
+const META_FIELDS = { title: 'txttitle', artist: 'txtartist', bpm: 'txtbpm' };
+function writeFieldToTxt(key) {
+  const t = $('txtin');
+  if (!t || !t.value.trim() || !window.Txt2Gp || !Txt2Gp.setMeta) return;
+  let v = ($(META_FIELDS[key]) && $(META_FIELDS[key]).value || '').trim();
+  if (key === 'bpm') { const n = parseInt(v, 10); v = n > 0 ? String(n) : ''; }
+  t.value = Txt2Gp.setMeta(t.value, key, v);
+}
+function writeAllFieldsToTxt() { Object.keys(META_FIELDS).forEach(writeFieldToTxt); }
+function syncFieldsFromTxt() {
+  const t = $('txtin');
+  if (!t || !t.value.trim() || !window.Txt2Gp || !Txt2Gp.getMeta) return;
+  const m = Txt2Gp.getMeta(t.value);
+  Object.keys(META_FIELDS).forEach(k => { if ($(META_FIELDS[k])) $(META_FIELDS[k]).value = m[k] || ''; });
 }
 
 // txt 開頭的全曲刷法（Strum: folk 或 刷法: D-D-DUDU），沒寫就是 null
@@ -2356,7 +2377,7 @@ function processTxt(opts = {}) {
     if (!window.Txt2Gp) throw new Error('Txt2Gp 元件尚未載入完成，請稍候再試。');
     let title = $('txttitle')?.value.trim() || '';
     const artist = $('txtartist')?.value.trim() || '';   // 可以留空
-    const tempo = parseInt($('txtbpm')?.value, 10) || 100;
+    const tempo = parseInt($('txtbpm')?.value, 10) || parseInt(Txt2Gp.getMeta(text).bpm, 10) || 100;   // 欄位空白就是 100
 
     if (sectionPatterns[curStrumTab]) {
       sectionPatterns[curStrumTab].tokens = peTokens.slice();
@@ -2461,6 +2482,20 @@ function initTxtBuilder() {
 
   // 使用者自己打字改了文字譜，小節可能整個移位：「還原」記住的舊和弦就不能再用了
   txtin.addEventListener('input', () => { txtOrigBarChords = {}; });
+  // 歌名／歌手／BPM 雙向同步。文字框原本是空的、開始輸入或貼上時：欄位已填的內容先寫進 txt，不被清掉
+  let lastTxt = txtin.value;
+  txtin.addEventListener('input', () => {
+    if (!txtin.value.trim()) {
+      // 文字譜整個刪光了（例如刪掉範例要貼自己的譜）：欄位也清空，免得範例的歌名被帶進新的譜
+      Object.values(META_FIELDS).forEach(id => { if ($(id)) $(id).value = ''; });
+    } else if (!lastTxt.trim()) writeAllFieldsToTxt();
+    else syncFieldsFromTxt();
+    lastTxt = txtin.value;
+  });
+  Object.keys(META_FIELDS).forEach(k => {
+    const el = $(META_FIELDS[k]);
+    if (el) el.addEventListener('input', () => { writeFieldToTxt(k); lastTxt = txtin.value; });
+  });
   // 離開編輯器後自動同步段落與節奏刷法編輯器
   txtin.addEventListener('blur', () => syncSectionsFromTxt());
   txtin.addEventListener('change', () => syncSectionsFromTxt());
@@ -2508,7 +2543,8 @@ function initTxtBuilder() {
         const meta = Txt2Gp.parseSongTxt(text).meta;
         $('txttitle').value = meta.title || f.name.replace(/\.txt$/i, '');
         $('txtartist').value = meta.artist || '';
-        if (/^\s*(bpm|tempo|速度)\s*[:：]/im.test(text)) $('txtbpm').value = meta.tempo;
+        $('txtbpm').value = Txt2Gp.getMeta(text).bpm ? meta.tempo : '';
+        writeAllFieldsToTxt();   // 檔案沒寫歌名時，用檔名補進 txt 的 Title:
       } catch (x) {}
       showEditorMsg('已載入檔案：' + f.name, false);
       syncSectionsFromTxt();
@@ -2594,6 +2630,7 @@ function initTxtBuilder() {
       scoreText = lines.join('\n').trim();
     }
     if ($('txtin')) $('txtin').value = scoreText;
+    writeAllFieldsToTxt();   // json 的歌名／歌手／BPM 寫進文字譜開頭，兩邊一致
 
     // 3. 節奏刷法設定 (strumming / sectionPatterns / patterns)
     // 匯入的是另一首歌：先清掉目前這首的刷法和和弦修改，不然沒寫到的段落／小節會沿用上一首的

@@ -1130,6 +1130,55 @@
     }).join(eol);
   }
 
+  // ---------- 歌名／歌手／BPM 欄位 <-> txt 開頭資訊 ----------
+  const META_KEYS = {
+    title: { re: /^(\s*)(title|歌名)(\s*[:：]\s*)(.*)$/i, label: 'Title', rank: 0 },
+    artist: { re: /^(\s*)(artist|歌手|原唱)(\s*[:：]\s*)(.*)$/i, label: 'Artist', rank: 1 },
+    bpm: { re: /^(\s*)(bpm|tempo|速度)(\s*[:：]\s*)(.*)$/i, label: 'BPM', rank: 2 },
+    ts: { re: /^(\s*)(ts|拍號)(\s*[:：]\s*)(.*)$/i, label: 'TS', rank: 3 },
+    strum: { re: /^(\s*)(strum|刷法)(\s*[:：]\s*)(.*)$/i, label: 'Strum', rank: 4 }
+  };
+  // 第一個段落標籤之前的行數（開頭資訊只在這一段裡找）
+  function headerEnd(lines) {
+    const i = lines.findIndex(l => HEADER_REGEX.test(l));
+    return i < 0 ? lines.length : i;
+  }
+  // 讀出開頭的 Title／Artist／BPM（沒寫就是 null）
+  function getMeta(txt) {
+    const lines = String(txt || '').replace(/\r\n?/g, '\n').split('\n');
+    const end = headerEnd(lines);
+    const out = { title: null, artist: null, bpm: null };
+    for (const k of Object.keys(out)) {
+      for (let i = 0; i < end; i++) {
+        const m = META_KEYS[k].re.exec(lines[i]);
+        if (m) { out[k] = m[4].trim(); break; }
+      }
+    }
+    return out;
+  }
+  // 設定開頭資訊：有那一行就改（保留原本的寫法，例如「歌名:」），沒有就依 Title、Artist、BPM 的順序插入；值是空的就拿掉那一行
+  function setMeta(txt, key, value) {
+    const def = META_KEYS[key];
+    if (!def) return txt;
+    const eol = /\r\n/.test(txt) ? '\r\n' : '\n';
+    const lines = String(txt).replace(/\r\n?/g, '\n').split('\n');
+    const val = String(value == null ? '' : value).replace(/[\r\n]+/g, ' ').trim();
+    const end = headerEnd(lines);
+    const idx = lines.slice(0, end).findIndex(l => def.re.test(l));
+    if (idx >= 0) {
+      if (!val) lines.splice(idx, 1);
+      else lines[idx] = lines[idx].replace(def.re, (all, sp, k, sep) => sp + k + sep + val);
+    } else if (val) {
+      // 插在排序比它前面的最後一個開頭資訊後面，沒有的話放第一行
+      let at = 0;
+      for (let i = 0; i < end; i++) {
+        if (Object.values(META_KEYS).some(d => d.rank < def.rank && d.re.test(lines[i]))) at = i + 1;
+      }
+      lines.splice(at, 0, def.label + ': ' + val);
+    }
+    return lines.join(eol);
+  }
+
   // 主入口：將 txt 轉為 alphaTex 與 .gp 檔案
   function convertTxtToGp(txt, opts) {
     opts = opts || {};
@@ -1185,7 +1234,9 @@
     setBarChords,
     formatBarChords,
     setSectionStrum,
-    setSongStrum
+    setSongStrum,
+    getMeta,
+    setMeta
   };
 
   if (typeof module !== 'undefined' && module.exports) {

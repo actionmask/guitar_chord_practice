@@ -294,3 +294,34 @@ test('setSongStrum adds or replaces the Strum: line and clears section tags', ()
   assert.equal(T.setSongStrum('[V]\nC', 'folk'), 'Strum: folk\n[V]\nC');
   assert.equal(T.setSongStrum('Title: a\r\n[V:folk]\r\nC', 'pop8'), 'Title: a\r\nStrum: pop8\r\n[V]\r\nC');
 });
+
+// ---------- Title / Artist / BPM fields <-> txt header ----------
+test('setMeta replaces an existing header line, including Chinese keys', () => {
+  const txt = '歌名: 舊歌名\nArtist: A\nBPM: 90\n[V]\nC';
+  assert.equal(T.setMeta(txt, 'title', '新歌名'), '歌名: 新歌名\nArtist: A\nBPM: 90\n[V]\nC');   // keeps the user's own key
+  assert.equal(T.setMeta(txt, 'bpm', 120), '歌名: 舊歌名\nArtist: A\nBPM: 120\n[V]\nC');
+});
+
+test('setMeta removes the line when the value is blank', () => {
+  assert.equal(T.setMeta('Title: t\nArtist: A\n[V]\nC', 'artist', ''), 'Title: t\n[V]\nC');
+  assert.equal(T.setMeta('Title: t\n[V]\nC', 'artist', ''), 'Title: t\n[V]\nC');
+});
+
+test('setMeta inserts missing lines in Title, Artist, BPM order before the first section', () => {
+  let txt = '[V]\nC';
+  txt = T.setMeta(txt, 'bpm', 80);
+  txt = T.setMeta(txt, 'title', '歌');
+  txt = T.setMeta(txt, 'artist', '某人');
+  assert.equal(txt, 'Title: 歌\nArtist: 某人\nBPM: 80\n[V]\nC');
+  assert.equal(T.setMeta('Strum: folk\nTS: 3/4\n[V]\nC', 'title', 'x'), 'Title: x\nStrum: folk\nTS: 3/4\n[V]\nC');
+});
+
+test('setMeta leaves look-alike lines after the first section alone, keeps CRLF', () => {
+  assert.equal(T.setMeta('Title: t\r\n[V]\r\nC\r\nTitle: lyric', 'title', 'u'), 'Title: u\r\n[V]\r\nC\r\nTitle: lyric');
+  assert.equal(T.setMeta('Title: a\nb', 'title', 'x\ny'), 'Title: x y\nb');   // no line breaks inside a value
+});
+
+test('getMeta reads only the header block', () => {
+  assert.deepEqual(T.getMeta('歌名: 歌\n歌手: 人\n速度: 72\n[V]\nC\nBPM: 99'), { title: '歌', artist: '人', bpm: '72' });
+  assert.deepEqual(T.getMeta('[V]\nC'), { title: null, artist: null, bpm: null });
+});
