@@ -325,3 +325,40 @@ test('getMeta reads only the header block', () => {
   assert.deepEqual(T.getMeta('歌名: 歌\n歌手: 人\n速度: 72\n[V]\nC\nBPM: 99'), { title: '歌', artist: '人', bpm: '72' });
   assert.deepEqual(T.getMeta('[V]\nC'), { title: null, artist: null, bpm: null });
 });
+
+// ---------- chords that sit inside a word; lyrics carry on to the next chord ----------
+const CHORUS = [
+  '[Verse]', 'D', "cuz baby I didn't", '',
+  '[Chorus]',
+  '                G', "that should be me, holdin' your hand",
+  '                D', "that should be me, makin' you laugh",
+  '               Em', 'that should be me, this is so sad',
+  '                C', 'that should be me, that should be me',
+  '              C', 'till you believe', '', 'that that should be me'
+].join('\n');
+
+test('a chord over the middle of a word starts at that word', () => {
+  const b = bars(CHORUS);
+  assert.deepEqual(b.map(x => x.chords[0] + ' | ' + x.text), [
+    "D | cuz baby I didn't that should be",
+    "G | me, holdin' your hand that should be",
+    "D | me, makin' you laugh that should be",
+    'Em | me, this is so sad that should be',
+    'C | me, that should be me till you',
+    'C | believe that that should be me'
+  ]);
+});
+
+test('no lyric is lost between chords', () => {
+  const words = s => s.replace(/\[[^\]]*\]/g, ' ').split(/\s+/).filter(w => w && !/^(D|G|Em|C)$/.test(w));
+  assert.deepEqual(words(bars(CHORUS).map(x => x.text).join(' ')), words(CHORUS));
+});
+
+test('a compact chord line keeps the whole lyric on its first chord', () => {
+  assert.deepEqual(bars('[Intro]\nEm C G D\nthat should be me').map(x => x.text), ['that should be me', '', '', '']);
+  assert.deepEqual(bars('[Intro]\nEm C G D\nmmmmmmm').map(x => x.text), ['mmmmmmm', '', '', '']);
+});
+
+test('the first chord of a line can sit inside the first word', () => {
+  assert.deepEqual(bars('[End]\n G             D\nThat should be me').map(x => x.text), ['That should be', 'me']);
+});

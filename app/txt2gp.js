@@ -373,7 +373,7 @@
 
   // 切割歌詞（依據和弦所在的「顯示欄位」）。
   // 中文歌詞通常沒有空白：和弦正下方那個字就是這個和弦的第一個字。
-  // 英文歌詞：切點落在單字中間時，往後移到單字結尾（和弦標在音節上，不切斷單字）。
+  // 英文歌詞：和弦標在某個單字上（落在單字中間）時，那個單字整個屬於這個和弦，切點往前移到單字開頭。
   function splitLyric(lyric, cols) {
     const chars = Array.from(lyric);
     const starts = [];
@@ -385,7 +385,7 @@
       // 第一個「涵蓋或超過這個欄位」的字
       let c = chars.findIndex((ch, i) => starts[i] + charWidth(ch) > col);
       if (c < 0) c = chars.length;
-      while (c > 0 && c < chars.length && isWord(chars[c - 1]) && isWord(chars[c])) c++;
+      while (c > 0 && c < chars.length && isWord(chars[c - 1]) && isWord(chars[c])) c--;
       if (cuts.length && c < cuts[cuts.length - 1]) c = cuts[cuts.length - 1];
       cuts.push(c);
     }
@@ -498,6 +498,15 @@
 
     const sections = [];
     let curSection = null;
+    let pendingLyric = '';   // 還沒有任何小節時出現的歌詞，留給下一個小節
+    // 到目前為止的最後一小節（可能在前面的段落）
+    function lastBarSoFar() {
+      for (let k = sections.length - 1; k >= 0; k--) {
+        const bs = sections[k].bars;
+        if (bs.length) return bs[bs.length - 1];
+      }
+      return null;
+    }
 
     function getCurSection(name) {
       if (!curSection || (name && curSection.name !== name)) {
@@ -595,9 +604,10 @@
         // 依據欄位將歌詞切給各和弦
         let lead = '';
         let parts = [];
-        // 簡寫和弦（"C G Am F" 擠在一起，下面整句歌詞）：和弦間距很小，而且歌詞遠比和弦行長
-        const isCompact = groups.length > 1 && groups.every((g, idx) => idx === 0 || g.col - groups[idx - 1].col <= 4) &&
-          displayWidth(lyricLine.trim()) > 2 * (groups[groups.length - 1].col + 4);
+        // 簡寫和弦（"Em C G D" 和弦之間只隔一個空白，下面整句歌詞）：沒有對齊歌詞的意思，整句給第一個和弦。
+        // 用「和弦之間的空白」判斷，不用欄位距離：對齊歌詞的和弦行至少會隔兩格以上。
+        const endCol = g => displayWidth(chordLineBody.slice(0, g.end));
+        const isCompact = groups.length > 1 && groups.every((g, idx) => idx === 0 || g.col - endCol(groups[idx - 1]) <= 1);
         if (!lyricLine.trim()) {
           parts = new Array(groups.length).fill('');
         } else if (isCompact) {
@@ -611,9 +621,12 @@
         }
 
         const sec = getCurSection();
-        // 弱起歌詞接在前一小節；段落的第一句沒有前一小節，就併進這一行第一個和弦，不要丟掉
-        if (lead && sec.bars.length) {
-          sec.bars[sec.bars.length - 1].text = (sec.bars[sec.bars.length - 1].text + ' ' + lead).trim();
+        // 弱起歌詞（第一個和弦之前的字）接在前一小節後面——歌詞是延續的，就算前一小節在上一段也一樣；
+        // 整首歌的第一句沒有前一小節，就併進這一行第一個和弦，不要丟掉
+        const prevBar = lastBarSoFar();
+        if (pendingLyric) { lead = (pendingLyric + ' ' + lead).trim(); pendingLyric = ''; }
+        if (lead && prevBar) {
+          prevBar.text = (prevBar.text + ' ' + lead).trim();
         } else if (lead) {
           parts[0] = (lead + ' ' + (parts[0] || '')).trim();
         }
@@ -638,11 +651,10 @@
           });
         }
       } else {
-        // 沒有和弦的獨立歌詞行：接到最後一小節後面
-        if (curSection && curSection.bars.length) {
-          const lastBar = curSection.bars[curSection.bars.length - 1];
-          lastBar.text = (lastBar.text + ' ' + trimmed).trim();
-        }
+        // 沒有和弦的獨立歌詞行：接到目前最後一小節後面（就算在上一段）；前面還沒有小節，就留給下一個小節，不要丟掉
+        const lastBar = lastBarSoFar();
+        if (lastBar) lastBar.text = (lastBar.text + ' ' + trimmed).trim();
+        else pendingLyric = (pendingLyric + ' ' + trimmed).trim();
       }
     }
 
